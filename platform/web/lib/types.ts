@@ -1,0 +1,6 @@
+export type User={id?:string;fullName:string;email:string;role:string;organizationId?:string;emailVerified?:boolean;totpEnabled?:boolean};
+export type Call={id:string;source:string;destination:string;direction:string;startTime:string;duration:number;customerCharge:string|number;status:string;sipCode:number;trunkName?:string;mode?:string;disconnectReason?:string};
+export type Transaction={id:string;amount:string|number;kind:string;description:string;createdAt:string};
+export type Trunk={id:string;name:string;enabled:boolean;authType:string;maxConcurrent:number;mode:string};
+export type PhoneNumber={id:string;number:string;kind:string;status:string;mode:string;city?:string;monthlyCharge?:string};
+export type DashboardData={mode:string;snapshot:boolean;user:User;organization:{id:string;businessName:string;status:string;mode:string;productionEnabled:boolean};summary:{outboundCalls:number;inboundCalls:number;balance:string;credit:string;totalCalls:number;successfulCalls:number;failedCalls:number;activeCalls:number;minutes:number;cost:number;trunks:number;numbers:number;successRate:number};traffic:{label:string;outbound:number;inbound:number;time?:string}[];calls:Call[];transactions:Transaction[];trunks:Trunk[];numbers:PhoneNumber[];services:{name:string;status:string;state:string}[]};

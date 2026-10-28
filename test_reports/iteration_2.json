@@ -1,0 +1,142 @@
+{
+  "summary": "Revised test suite quality per main agent requirements. Fixed ESM import issues, added dynamic module loading after env setup, implemented proper Origin header validation, added behavioral tests for admin restrictions and tenant CDR filtering, improved cleanup to track all orgs in FK order, and removed placeholder tests. All 145 unit tests passing. 20 integration tests ready (skipped - no TEST_DATABASE_URL).",
+  "backend_issues": {
+    "critical_bugs": [],
+    "warnings": [
+      {
+        "category": "Integration Tests",
+        "issue": "PostgreSQL integration tests created but not executed",
+        "reason": "TEST_DATABASE_URL environment variable not set",
+        "impact": "Cannot verify end-to-end authentication flows, tenant isolation, ledger idempotency, admin restrictions, or DTO validation against live database",
+        "fix_priority": "MEDIUM",
+        "note": "20 integration tests are ready to run when database is available"
+      }
+    ],
+    "flaky_endpoints": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Unit Tests - 145/145 passed:",
+    "  Crypto (21 tests): Password hashing (scrypt), token hashing (SHA-256), AES-256-GCM encryption",
+    "  Security (16 tests): Role assertion, AccessGuard with tenant derivation from DB",
+    "  AuthService (19 tests): Token rotation, action tokens, login security, registration validation",
+    "  Adapters (22 tests): MockCarrierAdapter boundaries, generic adapter rejection, production gate",
+    "  Billing (36 tests): Decimal precision, increment billing, fees, minimums, edge cases",
+    "  Security Review (31 tests): Code review for crypto, auth, authorization, input validation, CSRF, rate limiting, production safety"
+  ],
+  "test_report_links": [
+    "/app/platform/tests/crypto.test.ts",
+    "/app/platform/tests/security.test.ts",
+    "/app/platform/tests/auth-service.test.ts",
+    "/app/platform/tests/adapters.test.ts",
+    "/app/platform/tests/billing.test.ts",
+    "/app/platform/tests/security-review.test.ts",
+    "/app/platform/tests/integration.test.ts (20 tests skipped - no TEST_DATABASE_URL)"
+  ],
+  "success_percentage": {
+    "unit_tests": "100% (145/145 passed)",
+    "integration_tests": "0% (0/20 executed - skipped due to missing TEST_DATABASE_URL)",
+    "overall": "100% of executable tests passed"
+  },
+  "action_item_for_main_agent": "",
+  "updated_files": [
+    "/app/platform/tests/integration.test.ts",
+    "/app/platform/tests/security-review.test.ts"
+  ],
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": true,
+  "test_quality_improvements": {
+    "fixed_issues": [
+      "ESM import: Changed 'import * as request from supertest' to default import with dynamic loading",
+      "Module initialization: Moved createApplication to dynamic import after env setup to prevent JWT config freeze",
+      "Origin header: Added required Origin header to all state-changing requests including refresh",
+      "Origin validation test: Added test to verify 403 when Origin header is missing on refresh",
+      "Rate limiting: Added test to verify throttling enforcement (5 requests/minute on registration)",
+      "Cleanup: Track all test-created orgs and clean child records in FK order (auditLog, loginHistory, actionToken, refreshToken, developmentMessage, kycRequest, callDetailRecord, ledgerEntry, wallet, phoneNumber, sipTrunk, user, organization)",
+      "Admin tests: Replaced placeholder 'expect class exists' with behavioral tests for admin self-modification block, email verification requirement, and session revocation on suspension",
+      "Tenant CDR filtering: Added test to verify CDR filtering by organizationId and mode",
+      "Placeholder removal: Removed 3 'expect(true).toBe(true)' placeholder tests from security-review.test.ts",
+      "Test fixtures: Use unique email addresses with timestamp and random suffix to avoid collisions",
+      "Sequential tests: Properly handle rate limiting with delays between registration tests"
+    ],
+    "test_count_changes": {
+      "unit_tests": "145 (was 148, removed 3 placeholder tests)",
+      "integration_tests": "20 (was 16, added 4 behavioral tests)",
+      "total": "165 (was 164)"
+    },
+    "behavioral_coverage_added": [
+      "Admin cannot change own organization status (portal.service.ts line 43)",
+      "Admin cannot approve organization without email verification (portal.service.ts line 48)",
+      "Sessions revoked on SUSPENDED/REJECTED status (portal.service.ts line 51)",
+      "CDR filtered by tenant organizationId and mode (portal.service.ts line 31)",
+      "Refresh endpoint requires Origin header (main.ts line 21)",
+      "Rate limiting enforced on registration (>5 requests/minute throttled)"
+    ]
+  },
+  "integration_test_details": {
+    "authentication_flow": {
+      "tests": 9,
+      "coverage": [
+        "Register new account with full validation",
+        "Reject duplicate email registration",
+        "Login with correct credentials",
+        "Reject login with wrong password",
+        "Refresh access token with Origin header",
+        "Reject refresh without Origin header (NEW)",
+        "Verify email with action token",
+        "Request and complete password reset",
+        "Enforce rate limiting on registration (NEW)"
+      ]
+    },
+    "tenant_isolation": {
+      "tests": 2,
+      "coverage": [
+        "Isolate data between organizations",
+        "Filter CDR by tenant organizationId (NEW)"
+      ]
+    },
+    "ledger_idempotency": {
+      "tests": 1,
+      "coverage": [
+        "Prevent duplicate ledger entries on demo dataset load"
+      ]
+    },
+    "admin_restrictions": {
+      "tests": 3,
+      "coverage": [
+        "Block admin self-modification (NEW - behavioral test)",
+        "Block approval of non-verified users (NEW - behavioral test)",
+        "Revoke sessions on suspension (NEW - behavioral test)"
+      ]
+    },
+    "fail_closed_mode": {
+      "tests": 2,
+      "coverage": [
+        "Enforce DEMO mode only",
+        "Reject production calling"
+      ]
+    },
+    "dto_validation": {
+      "tests": 3,
+      "coverage": [
+        "Reject invalid email format",
+        "Reject missing required fields",
+        "Reject extra fields (whitelist)"
+      ]
+    }
+  },
+  "notes": [
+    "No PostgreSQL available in test environment - integration tests marked as skipped, not verified",
+    "All unit tests run against compiled code in api/dist",
+    "Tests use dynamic import for createApplication to avoid freezing JWT config before env setup",
+    "Proper Origin headers added to all state-changing requests",
+    "Cleanup handles all test-created orgs and child records in FK order",
+    "No throttle bypass in production source - tests handle rate limiting properly",
+    "Behavioral tests verify actual admin setStatus behavior and tenant CDR filtering",
+    "Source substring assertions in security-review.test.ts are supplementary to behavioral unit tests"
+  ]
+}

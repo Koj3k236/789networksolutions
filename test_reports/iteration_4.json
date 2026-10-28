@@ -1,0 +1,56 @@
+{
+  "summary": "Final focused regression review completed. Verified integration.test.ts corrections, typechecking, unit tests, and preview deployment. All 8 integration-suite bug fixes validated as correct. Public banner and dashboard navigation tested on desktop/mobile.",
+  "backend_issues": {
+    "critical_bugs": [],
+    "flaky_endpoints": [],
+    "notes": "No backend issues found. All corrections in integration.test.ts are correct and well-structured."
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "notes": "Public banner (data-testid=demo-mode-banner) displays correctly with 'DEMO MODE' and 'Read-only preview' text. Dashboard and public page navigation work correctly on desktop (1920x800) and mobile (390x844)."
+  },
+  "passed_tests": [
+    "TypeScript compilation: yarn tsc -p api/tsconfig.json (0 errors)",
+    "Unit tests: 145 passed (auth-service, crypto, security, billing, security-review, adapters)",
+    "Integration tests: 19 skipped as expected (no TEST_DATABASE_URL, no PostgreSQL, no Redis)",
+    "Public banner verification: DEMO MODE text present with data-testid=demo-mode-banner",
+    "Public page navigation: All nav links (services, network, pricing, developers) working",
+    "Dashboard navigation: Sidebar links (Overview, SIP trunks, Phone numbers, Call records, Live calls) working",
+    "Mobile responsiveness: Banner and navigation verified on 390x844 viewport",
+    "Desktop responsiveness: Banner and navigation verified on 1920x800 viewport"
+  ],
+  "test_report_links": [
+    "/app/platform/tests/integration.test.ts",
+    "/app/test_reports/iteration_4.json",
+    ".screenshots/public-company-desktop.png",
+    ".screenshots/public-company-mobile.png",
+    ".screenshots/dashboard-desktop-1920x800.png",
+    ".screenshots/dashboard-mobile-390x844.png"
+  ],
+  "success_percentage": {
+    "backend": "100% (145/145 unit tests passed, integration tests correctly skipped)",
+    "frontend": "100% (public banner, navigation, and responsiveness verified)",
+    "integration_corrections": "100% (all 8 bug fixes validated as correct)"
+  },
+  "updated_files": [],
+  "action_item_for_main_agent": "",
+  "integration_test_corrections_validated": {
+    "developmentMessage_cleanup": "✅ Correct - uses exact tracked email list from testUsers (line 123)",
+    "admin_fixture_hash": "✅ Correct - uses real hashPassword function (line 96)",
+    "admin_fixture_jwt": "✅ Correct - uses AuthService.login for session-issued JWTs (lines 307, 320, 331, 405, 430, 445, 491, 515)",
+    "rate_limit_isolation": "✅ Correct - isolated app instance prevents poisoning main buckets (lines 285-302)",
+    "missing_field_validation_isolation": "✅ Correct - isolated app instance (lines 550-563)",
+    "patch_expects_200": "✅ Correct - line 500 expects 200",
+    "review_reason_validation": "✅ Correct - 'Test reason' (11 chars) and 'Test approval' (13 chars) both meet >=5 requirement (lines 438, 453)",
+    "tenant2_seeded_96": "✅ Correct - assertion expects 96 CDRs (line 391)"
+  },
+  "external_blockers": [
+    "PostgreSQL database not available (TEST_DATABASE_URL not set) - 19 integration tests skipped",
+    "Redis not available - rate limiting and session storage use in-memory fallback",
+    "No real telecom infrastructure - Phase 1 source-first development with read-only preview"
+  ],
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_test_itself": false
+}

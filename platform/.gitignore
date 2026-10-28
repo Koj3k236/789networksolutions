@@ -1,0 +1,8 @@
+node_modules/
+web/.next/
+web/out/
+api/dist/
+.env
+.env.local
+*.log
+coverage/
