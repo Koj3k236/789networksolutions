@@ -5,6 +5,41 @@ datasource db {
   provider = "postgresql"
   url = env("DATABASE_URL")
 }
+enum CallerIdPermissionStatus {
+  DISABLED
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+enum CallerIdRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+enum CallerIdAuthorizationStatus {
+  PENDING
+  AUTHORIZED
+  REJECTED
+  REVOKED
+}
+model CallerIdPermissionRequest {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  requestedById String @db.Uuid
+  requestedBy User @relation("CallerIdRequester", fields:[requestedById], references:[id])
+  justification String
+  status CallerIdRequestStatus @default(PENDING)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  reviewedById String? @db.Uuid
+  reviewedBy User? @relation("CallerIdReviewer", fields:[reviewedById], references:[id], onDelete:SetNull)
+  reviewedAt DateTime? @db.Timestamptz(3)
+  decisionNotes String?
+  @@index([organizationId, status, createdAt])
+  @@map("caller_id_permission_requests")
+}
+
 enum Mode {
   DEMO
   STAGING
@@ -54,6 +89,16 @@ model Organization {
   kyc KycRequest[]
   trunks SipTrunk[]
   callerIds CallerId[]
+  externalCallerIdPassthroughEnabled Boolean @default(false)
+  allowPerCallCallerIdSelection Boolean @default(false)
+  requireAdditionalCallerIdReview Boolean @default(true)
+  callerIdPermissionStatus CallerIdPermissionStatus @default(DISABLED)
+  callerIdApprovalNotes String?
+  callerIdPermissionsUpdatedAt DateTime? @db.Timestamptz(3)
+  callerIdPermissionsUpdatedById String? @db.Uuid
+  callerIdPermissionsUpdatedBy User? @relation("CallerIdSettingsEditor", fields:[callerIdPermissionsUpdatedById], references:[id], onDelete:SetNull)
+  callerIdPermissionVersion Int @default(0)
+  callerIdPermissionRequests CallerIdPermissionRequest[]
   numbers PhoneNumber[]
   orders NumberOrder[]
   ports PortingRequest[]
@@ -87,6 +132,10 @@ model User {
   sessions RefreshToken[]
   tokens ActionToken[]
   logins LoginHistory[]
+  callerIdSettingsEdited Organization[] @relation("CallerIdSettingsEditor")
+  callerIdRequestsSubmitted CallerIdPermissionRequest[] @relation("CallerIdRequester")
+  callerIdRequestsReviewed CallerIdPermissionRequest[] @relation("CallerIdReviewer")
+  callerIdVerifications CallerIdVerification[] @relation("CallerIdNumberReviewer")
   @@index([organizationId])
   @@map("users")
 }
@@ -213,6 +262,13 @@ model CallerId {
   verified Boolean @default(false)
   authorizationRef String?
   stirStatus String @default("UNVERIFIED")
+  status CallerIdAuthorizationStatus @default(PENDING)
+  submittedAuthorization String?
+  additionalReviewAt DateTime? @db.Timestamptz(3)
+  expiresAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  version Int @default(0)
   verifications CallerIdVerification[]
   @@unique([organizationId, number])
   @@map("caller_ids")
@@ -224,6 +280,10 @@ model CallerIdVerification {
   method String
   result String
   evidenceObjectKey String?
+  evidenceReference String?
+  notes String?
+  reviewedById String? @db.Uuid
+  reviewedBy User? @relation("CallerIdNumberReviewer", fields:[reviewedById], references:[id], onDelete:SetNull)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   @@map("caller_id_verifications")
 }

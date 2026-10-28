@@ -1,209 +1,232 @@
-# plan.md — 789 NETWORK SOLUTIONS (Phase 1 Foundation)
+# plan.md — 789 NETWORK SOLUTIONS (Updated: Caller ID Permission Management)
 
 ## 1) Objectives
-- Deliver Phase 1 foundation on the **requested stack** (no stack substitution):
+- Maintain the **requested stack** (no substitutions):
   - **Web:** Next.js (TypeScript) + Tailwind + shadcn/ui + Lucide + Recharts + React Query + Zustand
   - **API:** NestJS (TypeScript) + OpenAPI
   - **DB:** PostgreSQL + Prisma
-  - **Background jobs:** Redis + BullMQ (optional; fail explicitly if Redis not configured)
-- Provide a **carrier-independent architecture**:
-  - `UpstreamCarrierAdapter` interface
-  - `MockCarrierAdapter` (explicitly simulated)
-  - Generic SIP/REST adapters that **fail closed** with explicit capability errors
-  - **No upstream carrier is connected**; the platform must never present simulated activity as real.
-- Ensure **persistent, tenant-safe authentication + RBAC + audit**:
-  - scrypt password hashing
-  - access JWT + rotating refresh token sessions (hashed in DB)
-  - dev outbox for email verification/reset (explicitly local-only)
-  - optional TOTP enroll/enable + replay prevention
-  - role-guarded admin endpoints and strict tenant scoping
-  - account status enforcement (suspend/reject blocks access)
-- Deliver a professional, original UI/UX (dark/light) and **explicit DEMO boundary**:
-  - persistent DEMO disclosures
-  - write operations either functional (connected local mode) or explicitly unavailable
-  - **Managed preview is READ-ONLY SNAPSHOT** (no writes and no “success” fakery)
-- Ship full repository structure, forward-looking Prisma schema + baseline SQL migration, docs, and downloadable source.
+  - **Background jobs:** Redis + BullMQ (optional; explicit failure if Redis not configured)
+- Preserve all currently working Phase 1 modules; **do not modify unrelated modules** except where integration requires (types, navigation links, RBAC wiring, audit logging).
+- Implement **carrier-independent** Caller ID Permission Management:
+  - Per-customer administrative permission toggles and approval workflow for **External Caller ID Passthrough**
+  - Enforce capability boundaries: calling remains unavailable; carrier capability restrictions must not be bypassed
+  - Provide complete **audit logging** and **tenant isolation**
+- Ensure **real persistence** (no fake production data):
+  - All new Caller ID permission settings, requests, decisions, and authorized inventory stored in PostgreSQL **when a DATABASE_URL is configured**
+  - No simulated “connected” SIP state; no fabricated upstream results
 
-**Current status note:** Phase 1 **source implementation milestone is complete** and **available-environment verification is complete**, but full Phase 1 acceptance remains **BLOCKED** on a compatible PostgreSQL/Redis runtime (see §3 Next Actions).
-
-## 2) Implementation Steps
-
-### Phase 1 — Core POC (Isolation) ✅ required
-Core risk = **multi-tenant auth + RBAC + audit + demo-mode boundaries** with PostgreSQL/Prisma + refresh rotation + idempotent ledger writes.
-
-✅ Completed in source (`/app/platform/api`) with:
-- Org + User creation, password hashing, email verification/reset via encrypted dev outbox.
-- JWT access + hashed refresh token rotation with DB session re-checks.
-- RBAC guard + tenant scoping derived from DB session (not request-supplied).
-- Audit logs for registration, login, status changes, and demo dataset creation.
-- Ledger model and demo billing arithmetic (Decimal) + idempotency keys.
-
-✅ POC tests completed (unit-level):
-- Token rotation invalidates old tokens.
-- RBAC denies, tenant isolation enforced.
-- Billing charge calculations and adapter capability boundaries.
-
-⚠️ Integration tests exist but are **skipped here** (DB not available); see §3.
-
-### Phase 2 — V1 App Development (Phase 1 deliverable) ✅ SOURCE IMPLEMENTATION COMPLETE
-> Build around proven auth/tenant core. In managed preview, ship Next static export with sample snapshot + disabled mutations.
-
-**Backend (NestJS) — `/app/platform/api`** ✅
-1. Scaffold NestJS app modules (auth, portal, admin, audit, demo-mode, carriers, health, OpenAPI).
-2. Prisma schema (Postgres) covering Phase 1 + future tables (coherent placeholders):
-   - organizations, users, roles/permissions tables (future), refresh_tokens, action_tokens, development_outbox
-   - login_history, kyc_requests
-   - audit_logs
-   - wallets, ledger_entries
-   - sip_trunks, sip_credentials, authorized_ips (future)
-   - call_sessions/call_events (future) + call_detail_records (used for demo stored CDR)
-   - phone_numbers/number_orders/porting_requests (future)
-   - upstream_carriers/upstream_credentials/capabilities/routes (future)
-   - rate_decks/rate_entries/customer_rate_plans (future)
-   - payments/invoices (future)
-   - api_keys/webhooks/webhook_deliveries (future)
-   - support_tickets/fraud_alerts/system_settings/contact_requests
-3. Seed and dev tooling:
-   - demo seed script for a customer/admin + demo dataset
-   - dev outbox reader CLI
-4. REST endpoints (versioned `/api/v1`) + OpenAPI:
-   - Auth: register, login, refresh, logout, verify-email, request-reset, reset-password, TOTP setup/enable, me
-   - Customer: dashboard summary (KPIs + charts inputs + recent CDR + ledger), CDR query, balance, login history
-   - Admin: summary, customers list, customer status update, audit query
-   - Carriers: adapter scaffolds/capabilities list (DEMO)
-   - Explicit unavailability: calls initiation and trunk writes return capability/phase errors
-5. BullMQ/Redis integration:
-   - queue producer endpoint for demo dataset job
-   - worker consumer source (`api/src/worker.ts`)
-   - if Redis missing: explicit 503-style error (no silent fallback)
-
-**Frontend (Next.js) — `/app/platform/web`** ✅
-1. Next.js TS app (App Router) + Tailwind + shadcn/ui + next-themes + Lucide + Recharts + React Query + Zustand.
-2. Original brand and layout per guidelines:
-   - dark navy sidebar, electric-blue accents
-   - fonts: **Figtree + Source Code Pro**
-   - responsive desktop/mobile and light/dark mode
-3. Public marketing + legal draft pages (original content, no BulkVS cloning):
-   - Company (home), About, SIP Trunking, Wholesale Voice, Outbound, Inbound, Local DID, Toll-Free,
-     Voice API, Pricing, Coverage, Network Infrastructure, Developers, Contact,
-     Terms, Privacy, AUP
-4. Auth pages (UI complete; connected mode uses API):
-   - Register, Login, Verify Email, Reset Password, Forgot Password
-5. Customer portal pages:
-   - /dashboard overview with KPI tiles, traffic chart, service status, recent calls, exports
-   - Calls (CDR) with search/filter/pagination/detail dialog and CSV page export
-   - Billing ledger view and exports; funds addition disabled
-   - Trunks page shows demo config; create/edit disabled (Phase 2)
-   - Numbers/live/webhooks show planned/unavailable with clear phase labels
-   - Developers page includes API/setup/architecture/roadmap tabs + source ZIP download
-6. Admin portal pages:
-   - Overview, Customers, Verification queue view, Carriers, Audit logs
-   - In preview, status changes disabled; in connected mode, RBAC enforced via API
-7. DEMO MODE boundary:
-   - Global banner across portal pages; explicit “no upstream carrier / no real calls/payments”
-   - Public site includes DEMO MODE wording
-
-**Managed Preview integration** ✅
-- Next static export is served by existing `/app/frontend/craco.config.js` middleware.
-- Preview is explicitly **READ-ONLY SNAPSHOT**:
-  - `NEXT_PUBLIC_PREVIEW=true`
-  - sample dataset is fictional and coherent (409 sample CDRs tied to chart totals)
-  - mutations are disabled and never pretend to succeed
-
-**Docs & Ops — `/app/platform/docs`** ✅ (with explicit limitations)
-- SETUP.md (Windows + VS Code + compatible Linux contract)
-- ARCHITECTURE.md, DATABASE.md, API.md, SECURITY.md, SIP-ACCEPTANCE.md
-- STATUS.md and VERIFICATION.md (explicitly distinguishes what is verified here vs blocked)
-- DESIGN.md design-system summary
-
-**Deliverables** ✅
-- Downloadable source ZIP verified and hosted at:
-  - `/downloads/789-network-solutions-source.zip` (actual ZIP, no secrets)
-
-### Phase 3 — Adding More Features (post-Phase-1, NOT started)
-1. Expand telecom-core skeleton pages into real CRUD:
-   - SIP trunks create/edit/delete
-   - IP auth (CIDR allowlist) + SIP credential rotation (no plaintext)
-   - caller ID ownership workflows
-2. Real-time events (WebSocket) + live calls:
-   - simulated demo sessions distinct from production
-   - admin call termination controls
-3. CDR ingestion pipeline + reconciliation stubs:
-   - normalize upstream CDRs, idempotency, auditability
-4. Extend carrier adapters:
-   - capability matrix, verified integration tests
-5. Repeat full testing round:
-   - add DB integration tests + concurrency tests
-
-## 3) Next Actions (immediate)
-
-### 3.1 Phase 1 Acceptance (BLOCKED on external runtime)
-To mark Phase 1 truly complete (beyond source and preview), run on a compatible machine:
-1. PostgreSQL acceptance:
-   - apply migrations (`prisma migrate deploy`)
-   - execute **integration tests** with `TEST_DATABASE_URL`
-   - run full flow: register → outbox verify → login → dashboard persistence → admin review/suspend
-   - concurrency/idempotency checks: demo dataset + ledger and CDR idempotency
-2. Redis/BullMQ acceptance (optional but required if enabled):
-   - verify enqueue + worker completion and retry behavior
-3. Operational acceptance:
-   - confirm rate-limits, CORS/origin enforcement, cookie security under HTTPS
-   - confirm no fallback to preview fixtures in connected mode
-
-### 3.2 Outstanding requested infrastructure deliverables (not created here)
-- Dockerfile / Docker Compose, ingress/reverse proxy configs, CI/CD pipelines, deployment automation.
-- The project includes a **service contract** and setup guide, but no working orchestration.
-
-### 3.3 Post-acceptance: begin Phase 2 (Telecommunications Core)
-- Implement SIP trunk CRUD and SIP edge integration architecture (Kamailio/OpenSIPS + FreeSWITCH + RTPengine)
-- Keep production fail-closed and demo clearly labeled.
-
-## 4) Success Criteria
-
-### Source Implementation Milestone ✅ COMPLETE
-- `/app/platform` contains requested-stack implementation and forward schema/migrations.
-- Managed preview renders polished UI as READ-ONLY SNAPSHOT with honest messaging.
-- Carrier-dependent actions are unavailable and explicitly labeled.
-- API refuses STAGING/PRODUCTION startup in Phase 1 (fail closed).
-- Downloadable source ZIP is present and verified.
-
-### Available-environment Verification ✅ COMPLETE (this environment)
-- Prisma validate/generate and migration SQL generation.
-- Nest compile and integration-test TypeScript check.
-- Next build (42 static pages).
-- Automated tests:
-  - 145 checks passed (114 behavioral unit + 31 supplemental source checks)
-  - 19 PostgreSQL integration tests **skipped** (no DB runtime).
-- Browser regression: passed; no remaining UI issues (see `/app/test_reports/iteration_4.json`).
-
-### Full Phase 1 Acceptance (BLOCKED)
-- Local mode: API boots with PostgreSQL; web boots; registration → verify → login → dashboard works with persisted data.
-- Admin mode: admin lists customers, changes status, views audit logs; unauthorized access blocked.
-- Demo boundary: no fake live services; production calling remains disabled without verified carrier.
-- Redis/BullMQ: worker jobs verified if enabled.
-- Infrastructure deliverables (Docker/Compose/CI/CD/ingress) provided by infrastructure track.
+**Current status note (final, updated):**
+- Caller ID source milestone is **COMPLETED** (schema, migration, APIs, UI, tests, docs).
+- The user **skipped** secure configuration for `DATABASE_URL` / `TEST_DATABASE_URL`. Therefore:
+  - We implemented complete source changes and generated/validated migrations,
+  - but PostgreSQL-backed persistence is **BLOCKED/UNVERIFIED** in this environment,
+  - integration tests are correctly **SKIPPED** (not “passed”),
+  - and managed preview shows an explicit **DB-unavailable** state for this module (no fake Caller ID records, no fake “save success”).
 
 ---
 
-## User stories
+## 2) Implementation Steps
 
-### Phase 1 (POC)
-1. As a user, I can register an organization and user account and receive a verification link in a local dev outbox.
-2. As a user, I can log in and receive access + refresh tokens, and refresh rotation blocks reuse of old refresh tokens.
-3. As an admin, I can access admin-only endpoints while non-admin users are denied.
-4. As a customer, I only see data belonging to my organization even if I guess other IDs.
-5. As the system, I record an audit log entry for every login and privileged action.
+### Phase 1 — Core POC (Isolation) ✅ complete
+Core risk = multi-tenant auth + RBAC + audit + idempotent ledger writes.
 
-### Phase 2 (V1 app)
-1. As a visitor, I can browse a professional marketing site and understand services without implied live coverage.
-2. As a customer, I can log in and view a dashboard with charts and recent CDR/ledger data sourced from storage.
-3. As a customer, I can clearly see DEMO MODE and understand which features are unavailable without an upstream carrier.
-4. As an admin, I can review customer status and audit events.
-5. As a developer, I can view API documentation and example requests for Phase 1 endpoints.
+✅ Completed in `/app/platform/api` with:
+- Org + User creation, password hashing, verification/reset via encrypted dev outbox.
+- JWT access + hashed rotating refresh token sessions.
+- RBAC guard + tenant scoping derived from DB session.
+- Audit logs.
+- Ledger model and demo billing arithmetic.
 
-### Phase 3 (future)
-1. As a customer, I can create and manage SIP trunks with IP auth or credential auth.
-2. As a customer, I can view call sessions and CDRs with filtering/export.
-3. As an admin, I can configure upstream carriers through adapters and see capability errors for unsupported ops.
-4. As operations, I can monitor live call events over WebSocket in demo and production-separated views.
-5. As billing, I can reconcile ledger entries with CDR charges idempotently and prevent double charging.
+✅ Unit test suite exists and passes (DB-gated integration tests skip without PostgreSQL).
+
+---
+
+### Phase 2 — V1 App Development (Phase 1 deliverable) ✅ SOURCE IMPLEMENTATION COMPLETE
+> Built around auth/tenant core. Managed preview remains a read-only snapshot only; connected mode is database-backed.
+
+✅ Backend (NestJS) and ✅ Frontend (Next.js) implemented for Phase 1.
+
+---
+
+### Phase 3 — Caller ID Permission Management (CURRENT SCOPE) ✅ SOURCE IMPLEMENTATION COMPLETE
+> **This update remained narrowly scoped to Caller ID Permission Management only.**
+
+#### 3.1 Requirements recap (authoritative)
+- Default for all new customers: **External Caller ID Passthrough = OFF**.
+- Admin-controlled settings under Customer Management → Caller ID Permissions:
+  - External Caller ID Passthrough: ON/OFF
+  - Allow Per-Call Caller ID Selection: ON/OFF
+  - Require Additional Caller ID Review: ON/OFF
+  - Caller ID Permission Status
+  - Approval Notes
+  - Authorized Number Inventory
+  - Last Modified By
+  - Last Modified Date
+- Customers can submit request to enable External Caller ID Passthrough.
+- Admin can approve/reject; approval does **not** imply number ownership verification is complete; it is a platform permission gate.
+- SIP trunk integration requirements:
+  - When enabled: allow selection among authorized external Caller IDs
+  - Apply across all customer trunks
+  - Validate before routing; reject unauthorized Caller ID values
+- Carrier compatibility is independent: carrier-specific policies must still be enforced.
+- No upstream carrier exists: actual calling must remain unavailable.
+
+**Caller ID verification approach:** documented authorization review (staff reviews submitted evidence; no verification calls implied).
+
+#### 3.2 Database (Prisma/PostgreSQL) ✅ implemented in schema + additive migration
+**Implemented approach:** normalized records (no “string[] as database”).
+
+✅ Implemented in `prisma/schema.prisma`:
+- **Organization-level defaults** (applies automatically to all new customers via DB defaults):
+  - `externalCallerIdPassthroughEnabled` default `false`
+  - `allowPerCallCallerIdSelection` default `false`
+  - `requireAdditionalCallerIdReview` default `true`
+  - `callerIdPermissionStatus` enum default `DISABLED`
+  - `callerIdApprovalNotes`, `callerIdPermissionsUpdatedAt`, `callerIdPermissionsUpdatedById`
+  - optimistic concurrency: `callerIdPermissionVersion`
+- **Normalized request workflow**:
+  - `CallerIdPermissionRequest` with `PENDING/APPROVED/REJECTED/CANCELLED` and reviewer metadata
+  - partial unique index: one pending request per org
+- **External Caller ID authorization state (separate from permission):**
+  - `CallerId.status` (`PENDING/AUTHORIZED/REJECTED/REVOKED`)
+  - evidence reference, additional review timestamp, expiry, `version` (optimistic)
+  - `CallerIdVerification` extended with review notes, evidence reference and reviewer identity
+
+✅ Additive migration generated:
+- `prisma/migrations/20261029000000_caller_id_permissions/migration.sql`
+- Adds constraints:
+  - one pending request per org (partial unique index)
+  - “enabled requires approval” check constraint
+
+**Important constraint:** migration generation/validation is complete, but applying migrations and validating persistence is **UNVERIFIED** here.
+
+#### 3.3 Backend API (NestJS) ✅ implemented
+✅ Implemented slice:
+- `api/src/caller-id/policy.ts` (fail-closed evaluator)
+- `api/src/caller-id/dto.ts`
+- `api/src/caller-id/caller-id.service.ts`
+- `api/src/caller-id/caller-id.controller.ts`
+- wired into `api/src/app.module.ts`
+
+**Customer endpoints (tenant scoped):**
+- `GET /api/v1/caller-id/workspace`
+- `POST /api/v1/caller-id/requests`
+- `DELETE /api/v1/caller-id/requests/:id`
+- `POST /api/v1/caller-id/inventory`
+- `DELETE /api/v1/caller-id/inventory/:id`
+- `PATCH /api/v1/caller-id/trunks/:id/default`
+- `POST /api/v1/caller-id/validate` (audited diagnostic; does not originate calls)
+
+**Admin endpoints (RBAC):**
+- `GET /api/v1/admin/caller-id/requests`
+- `GET /api/v1/admin/caller-id/customers/:orgId`
+- `PATCH /api/v1/admin/caller-id/customers/:orgId/permissions`
+- `POST /api/v1/admin/caller-id/customers/:orgId/requests/:id/decision`
+- `POST /api/v1/admin/caller-id/customers/:orgId/inventory/:id/review`
+
+**Validation + fail-closed behavior:**
+- Editable roles: **SUPER_ADMIN**, **COMPLIANCE_ADMIN** only; other admin roles read-only.
+- All writes are transactional and write audit logs.
+- Row-locking + optimistic version checks for org and caller ID updates.
+- Shared policy function returns:
+  - `customerPermissionAllowed`
+  - `carrierPolicyAllowed` (separate gate)
+  - `routingAllowed` **always false**
+  - reason codes and explicit service status: `Pending Upstream Activation`
+
+**SIP signaling note:** `resolveSignaledIdentity()` is a helper for a future trusted SIP edge, rejects conflicting identities. No SIP edge exists.
+
+#### 3.4 Frontend (Next.js) ✅ implemented
+Design reference: **/app/caller_id_design_guidelines.md**.
+
+✅ Customer portal:
+- `/dashboard/caller-ids/`
+  - Tabs: Permissions / Authorized inventory / My requests / SIP trunk defaults / Audit history
+  - Professional “Pending Upstream Activation” status language
+  - Honest **DB not connected** state in preview (no fake data, no fake mutation success)
+
+✅ Admin portal:
+- `/admin/caller-id-permissions/` (supports `?customer=`)
+  - Customer selector
+  - Permissions editing for SUPER/COMPLIANCE admins only
+  - Queue and review views
+- Entry point link added from Admin → Customers → customer detail dialog
+
+✅ UX requirement satisfied:
+- New Caller ID module screens do **not** show the old demo banner or any fabricated Caller ID data.
+- Existing unrelated mock dashboard pages remain unchanged.
+
+#### 3.5 Tests (mandatory) ✅ completed for unit/static checks; DB acceptance remains blocked
+✅ Implemented tests:
+- `tests/caller-id-unit.test.ts` — policy/service/DTO behavior with mocked Prisma
+- `tests/caller-id-integration.test.ts` — **DB-gated** PostgreSQL tests (skipped without TEST_DATABASE_URL)
+
+✅ Verified after manual defect fixes:
+- Integration suite safety guards:
+  - DB safety check uses URL pathname (database name), not substring search
+  - fixture IDs reset per-test; cleanup guarded by tracked IDs
+  - assigned-number fixture uses ACTIVE/PRODUCTION in isolated test DB only; organizations remain DEMO/calling disabled
+
+**Final test status (testing agent iteration_7):**
+- **222 checks passed** (77 new Caller ID behavioral checks + 145 prior unit/source)
+- **43 integration tests skipped** (24 new Caller ID integration + 19 previous integration)
+- TypeScript compilation succeeded for API and tests.
+- Browser verification confirmed disconnected-state UI does not claim writes.
+
+**Testing requirement satisfied:** `testing_agent_v3` verification report exists: `/app/test_reports/iteration_7.json`.
+
+---
+
+## 3) Next Actions (immediate)
+
+### 3.1 Completed deliverables in this scope ✅
+- Caller ID permission schema + migration
+- Tenant-scoped APIs + policy evaluator
+- Customer/admin UI surfaces + navigation
+- Unit tests + DB-gated integration tests
+- Documentation: `docs/CALLER-ID.md` and updates to README/STATUS/VERIFICATION/PRD
+- Source ZIP updated and downloadable
+
+### 3.2 Acceptance gate: PostgreSQL-backed validation (BLOCKED)
+Because the user skipped providing `DATABASE_URL` and `TEST_DATABASE_URL`:
+- We **must not** claim migrations executed, persistence validated, or DB integration tests passed.
+
+**Next required external acceptance steps (on a compatible machine):**
+1. Provide `DATABASE_URL` (app database) and `TEST_DATABASE_URL` (separate isolated test DB).
+2. Apply migrations:
+   - `yarn prisma migrate deploy`
+3. Run integration tests:
+   - `TEST_DATABASE_URL=... yarn vitest run tests/integration.test.ts tests/caller-id-integration.test.ts`
+4. Validate end-to-end workflows:
+   - Customer request → admin approve/reject
+   - Number submission → evidence review → authorized/revoked
+   - Trunk default set → permission revoked → trunk default cleared + per-trunk audit
+   - Tenant isolation across organizations
+
+### 3.3 Keep calling unavailable and carrier independent
+- Do not enable outbound/inbound calling.
+- Per-call selection is stored configuration + validation rule only.
+- Carrier compatibility remains a separate gate from customer permission.
+
+---
+
+## 4) Success Criteria
+
+### Caller ID Permission Management ✅ Source Complete
+- New customers default to passthrough OFF and per-call OFF; additional review ON.
+- Customer can request passthrough; admin can approve/reject with notes.
+- External Caller ID inventory supports submit → documented review → authorize/reject/revoke.
+- Trunk defaults can be set only from authorized inventory and cleared on invalidation (with per-trunk audit).
+- Tenant isolation enforced by server-side session principal + org ID scoping + row locks.
+- UI shows accurate states and never claims carrier/SIP readiness.
+
+### Testing and verification ✅ Completed within environment limits
+- Unit tests for permission logic, RBAC, DTO validation and policy evaluation pass.
+- `testing_agent_v3` report confirms:
+  - Correct workflow behavior at the unit level
+  - No false operational claims
+  - No regressions in existing modules
+  - DB-unavailable states are honest (no fabricated persistence)
+
+### DB acceptance ❌ Not complete
+- DB migrations + persistence + 43 integration tests remain **blocked/unverified** until PostgreSQL connection strings are provided and executed in a compatible runtime.

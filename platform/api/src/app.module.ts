@@ -9,5 +9,7 @@ import { AuthController } from './auth/auth.controller';
 import { PortalService } from './portal/portal.service';
 import { AdminController, PortalController } from './portal/portal.controller';
 import { DemoQueue } from './demo/queue.service';
-@Module({imports:[JwtModule.registerAsync({global:true,useFactory:()=>({secret:process.env.JWT_SECRET,signOptions:{expiresIn:'15m',issuer:'789-network-solutions',audience:'789-portal'},verifyOptions:{issuer:'789-network-solutions',audience:'789-portal',algorithms:['HS256']}})}),ThrottlerModule.forRoot([{ttl:60000,limit:100}])],controllers:[AuthController,PortalController,AdminController],providers:[PrismaService,AuthService,PortalService,DemoQueue,{provide:APP_GUARD,useClass:ThrottlerGuard},{provide:APP_GUARD,useClass:AccessGuard}]})
+import { CallerIdService } from './caller-id/caller-id.service';
+import { CallerIdController, CallerIdAdminController } from './caller-id/caller-id.controller';
+@Module({imports:[JwtModule.registerAsync({global:true,useFactory:()=>({secret:process.env.JWT_SECRET,signOptions:{expiresIn:'15m',issuer:'789-network-solutions',audience:'789-portal'},verifyOptions:{issuer:'789-network-solutions',audience:'789-portal',algorithms:['HS256']}})}),ThrottlerModule.forRoot([{ttl:60000,limit:100}])],controllers:[AuthController,PortalController,AdminController,CallerIdController,CallerIdAdminController],providers:[PrismaService,AuthService,PortalService,DemoQueue,CallerIdService,{provide:APP_GUARD,useClass:ThrottlerGuard},{provide:APP_GUARD,useClass:AccessGuard}]})
 export class AppModule {}

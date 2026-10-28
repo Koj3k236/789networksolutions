@@ -1,5 +1,13 @@
 # Verification record
 
+## Caller ID slice — latest verification
+
+Testing-agent report `iteration_7.json` confirms successful API/test TypeScript compilation, **222 automated checks passed** (77 new Caller ID behavioral checks plus 145 previous unit/source checks), and browser verification of the new disconnected-state UI. **43 PostgreSQL integration tests were skipped** (24 new, 19 previous). No migrations or real database workflows were executed. Any percentage fields in automated agent reports describing skipped cases as 100% must not be treated as database verification.
+
+Database/test-database credentials were requested securely and skipped. The new pages do not populate fictional records or show fake save success. The existing unrelated demo dashboard remains unchanged. Source and additive migration details: `CALLER-ID.md`. Actual PostgreSQL approval/persistence, concurrency and tenant isolation must still be accepted on a connected instance.
+
+## Previous Phase 1 verification (historical)
+
 ## Passed here
 
 - Prisma schema validation and Prisma client generation.

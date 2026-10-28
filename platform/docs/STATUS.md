@@ -26,7 +26,7 @@ Dockerfile/Compose configuration, reverse-proxy configuration, production deploy
 
 ## Phase 2 — planned, not implemented
 
-SIP trunk create/edit/delete, IP and credential authentication at SIP edge, caller ID ownership verification, routing policy, SIP method handling, codec negotiation, OPTIONS diagnostics, CDR ingestion, WebSocket monitoring and simulated/real active call controls.
+SIP trunk create/edit/delete, IP and credential authentication at SIP edge, live routing/SIP signaling, codec negotiation, OPTIONS diagnostics, CDR ingestion, WebSocket monitoring and simulated/real active call controls remain planned. The separate Caller ID permission/authorization management slice is now implemented in source; see CALLER-ID.md. Its real-database acceptance is still unverified, and it does not implement a SIP edge.
 
 ## Phase 3 — planned, not implemented
 

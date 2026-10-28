@@ -1,5 +1,21 @@
 # 789 NETWORK SOLUTIONS — Product continuity
 
+### Final Caller ID handoff
+Latest testing report: /app/test_reports/iteration_7.json. API/test TypeScript checks and222 automated checks passed;43 DB integration tests remain SKIPPED. Browser checks verified disconnected-state forms do not claim saved data and prior dashboard is unchanged. Report percentage fields incorrectly call skipped integrations100%; ignore that: no PostgreSQL operation was verified. Newbuild contains44 static pages. Source ZIP repack includes Caller ID source/migration/tests/docs. No operational activation is claimed.
+
+## Latest override — Caller ID permission management
+- User first asked for broad live-platform activation, then narrowed current development to Caller ID permissions only, explicitly preserving unrelated modules. Broad activation/Docker/Redis remains outstanding, not delivered by this slice.
+- User skipped secure DATABASE_URL and TEST_DATABASE_URL requests. No database was connected, no migrations applied, and no live persistence/DB tests may be claimed verified.
+- New customer /dashboard/caller-ids and admin /admin/caller-id-permissions?customer=UUID. Customer details links to permission page; sidebar additions only. New screens have professional Pending Upstream Activation and honest DB-unavailable states, no demo banner or fabricated customer records. Existing mock dashboard unchanged.
+- Added api/src/caller-id policy, DTOs, service, controllers; Organization defaults externalOFF/perCallOFF/additionalReviewON; request/review records, settings versions, last editor/time, additive migration20261029000000_caller_id_permissions with constraints.
+- SUPER_ADMIN/COMPLIANCE_ADMIN only edit. Customer requests approval distinct from documented number authorization; manual evidence reference + confirmation required; additional review independent. Assigned real ACTIVE inventory only; external statuses PENDING/AUTHORIZED/REJECTED/REVOKED. Tenant-wide trunk defaults validated and cleared on policy/revocation, with per-trunk audit records. Carrier gates independent and routingAllowed alwaysfalse. Parsed SIP identity helper rejects conflictingFrom/assertedIDs, no running SIP parser/server.
+- New caller-id.tsx has customer requests, registration/review, inventory, defaults, audit tabs, admin policy form and queue. Source writes call Nest APIs only; no localStorage/fake mutation success.
+- Testing iteration6:77 new unit checks plus145 prior =222 passed,43 DB tests skipped (24new+19old). Browser verification covers unavailable-state UI only, not real persistence. Reports'100%phrasing for skipped tests must never be repeated as proof.
+- Test agent twice generated flawed integration fixtures/cleanup. Main then fixed new suite's parsed DB-name guard, ID resets/cleanup guards and assigned-number fixture mode(PRODUCTION record only inside isolatedtestDB; orgmodeDEMO/callingfalse). Do not turn organization calling on to satisfy tests.
+- Module documentation platform/docs/CALLER-ID.md, design addendum /app/caller_id_design_guidelines.md. Updated source zip will include this slice.
+
+## Previous foundation context (historical)
+
 ## User decisions
 - User explicitly chose requested-stack source-first (Option B), not FARM substitution.
 - Main stack: Next.js TypeScript/Tailwind/shadcn/Recharts/React Query/Zustand; NestJS TypeScript; PostgreSQL Prisma; Redis/BullMQ worker.

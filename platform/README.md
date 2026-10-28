@@ -1,5 +1,9 @@
 # 789 NETWORK SOLUTIONS
 
+## Latest addition — Caller ID permissions
+
+See [Caller ID module documentation](docs/CALLER-ID.md) for the additive migration, customer/admin workflows, authorization policy, API endpoints, and test limitations. External passthrough defaults OFF. Carrier compatibility is enforced separately and outbound calling remains unavailable. The new Caller ID pages show a connection-required state, not fabricated sample records, when no PostgreSQL-backed session is available. Existing unrelated modules were preserved.
+
 ## Phase 1 — Requested-stack source foundation
 
 **Not a production telecommunications service. No upstream carrier, SIP edge, live calls, real numbers, payment processor, or real email delivery is connected.**

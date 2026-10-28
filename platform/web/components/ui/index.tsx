@@ -12,3 +12,9 @@ export const DialogContent=D.DialogContent as React.ComponentType<React.HTMLAttr
 export const Select=S.Select;export const SelectValue=S.SelectValue;export const SelectContent=S.SelectContent as React.ComponentType<any>;export const SelectTrigger=S.SelectTrigger as React.ComponentType<any>;export const SelectItem=S.SelectItem as React.ComponentType<any>;
 export const Checkbox=K.Checkbox as React.ComponentType<any>;
 export const Table=T.Table as React.ComponentType<React.TableHTMLAttributes<HTMLTableElement>>;export const TableHeader=T.TableHeader as React.ComponentType<React.HTMLAttributes<HTMLTableSectionElement>>;export const TableBody=T.TableBody as React.ComponentType<React.HTMLAttributes<HTMLTableSectionElement>>;export const TableRow=T.TableRow as React.ComponentType<React.HTMLAttributes<HTMLTableRowElement>>;export const TableHead=T.TableHead as React.ComponentType<React.ThHTMLAttributes<HTMLTableCellElement>>;export const TableCell=T.TableCell as React.ComponentType<React.TdHTMLAttributes<HTMLTableCellElement>>;
+import { Switch as BaseSwitch } from './switch';
+import { Textarea as BaseTextarea } from './textarea';
+import type { SwitchProps } from '@radix-ui/react-switch';
+export const Switch = BaseSwitch as React.ComponentType<SwitchProps>;
+export const Textarea = BaseTextarea as React.ComponentType<React.TextareaHTMLAttributes<HTMLTextAreaElement>>;
+
