@@ -5,6 +5,51 @@ datasource db {
   provider = "postgresql"
   url = env("DATABASE_URL")
 }
+model SupportTicketReply {
+  id String @id @default(uuid()) @db.Uuid
+  ticketId String @db.Uuid
+  ticket SupportTicket @relation(fields:[ticketId], references:[id], onDelete:Cascade)
+  authorId String @db.Uuid
+  author User @relation(fields:[authorId], references:[id])
+  body String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_replies")
+}
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  recipientId String @db.Uuid
+  recipient User @relation(fields:[recipientId], references:[id], onDelete:Cascade)
+  ticketId String? @db.Uuid
+  ticket SupportTicket? @relation(fields:[ticketId], references:[id], onDelete:SetNull)
+  title String
+  message String
+  path String
+  readAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([recipientId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model ApiUsageLog {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  apiKeyId String? @db.Uuid
+  apiKey ApiKey? @relation(fields:[apiKeyId], references:[id], onDelete:SetNull)
+  keyPrefix String
+  method String
+  route String
+  statusCode Int
+  requestId String @unique @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, createdAt])
+  @@index([apiKeyId, createdAt])
+  @@map("api_usage_logs")
+}
+
 enum CallerIdPermissionStatus {
   DISABLED
   REQUESTED
@@ -88,6 +133,8 @@ model Organization {
   users User[]
   kyc KycRequest[]
   trunks SipTrunk[]
+  sipConcurrentLimit Int @default(20)
+  sipCpsLimit Int @default(2)
   callerIds CallerId[]
   externalCallerIdPassthroughEnabled Boolean @default(false)
   allowPerCallCallerIdSelection Boolean @default(false)
@@ -109,8 +156,10 @@ model Organization {
   payments Payment[]
   invoices Invoice[]
   keys ApiKey[]
+  apiUsage ApiUsageLog[]
   webhooks Webhook[]
   tickets SupportTicket[]
+  notifications Notification[]
   fraud FraudAlert[]
   audit AuditLog[]
   @@index([status, createdAt])
@@ -130,6 +179,11 @@ model User {
   totpLastStep BigInt?
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   sessions RefreshToken[]
+  apiKeys ApiKey[]
+  supportTickets SupportTicket[] @relation("TicketCreator")
+  supportAssignments SupportTicket[] @relation("TicketAssignee")
+  supportReplies SupportTicketReply[]
+  notifications Notification[]
   tokens ActionToken[]
   logins LoginHistory[]
   callerIdSettingsEdited Organization[] @relation("CallerIdSettingsEditor")
@@ -218,6 +272,11 @@ model SipTrunk {
   organizationId String @db.Uuid
   organization Organization @relation(fields:[organizationId], references:[id])
   name String
+  description String @default("")
+  version Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
   enabled Boolean @default(false)
   mode Mode @default(DEMO)
   authType String @default("IP")
@@ -243,6 +302,8 @@ model SipCredential {
   trunk SipTrunk @relation(fields:[trunkId], references:[id], onDelete:Cascade)
   username String @unique
   digestEncrypted String
+  realm String @default("sip.example.com")
+  algorithm String @default("SHA-256")
   rotatedAt DateTime @default(now()) @db.Timestamptz(3)
   @@map("sip_credentials")
 }
@@ -541,6 +602,14 @@ model ApiKey {
   prefix String
   hash String @unique
   scopes String[]
+  createdByUserId String? @db.Uuid
+  createdBy User? @relation(fields:[createdByUserId], references:[id], onDelete:SetNull)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  lastUsedAt DateTime? @db.Timestamptz(3)
+  rotatedFromId String? @unique @db.Uuid
+  rotatedFrom ApiKey? @relation("ApiKeyRotation", fields:[rotatedFromId], references:[id], onDelete:SetNull)
+  rotatedTo ApiKey? @relation("ApiKeyRotation")
+  usageLogs ApiUsageLog[]
   revokedAt DateTime? @db.Timestamptz(3)
   expiresAt DateTime? @db.Timestamptz(3)
   @@index([organizationId])
@@ -579,6 +648,13 @@ model SupportTicket {
   priority String @default("NORMAL")
   status String @default("OPEN")
   assignedTo String? @db.Uuid
+  assignedToUser User? @relation("TicketAssignee", fields:[assignedTo], references:[id], onDelete:SetNull)
+  createdByUserId String? @db.Uuid
+  createdBy User? @relation("TicketCreator", fields:[createdByUserId], references:[id], onDelete:SetNull)
+  replies SupportTicketReply[]
+  notifications Notification[]
+  version Int @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   attachmentObjectKeys String[]
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   @@index([organizationId, status])

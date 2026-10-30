@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "content": "C: Add persistent support threads, admin controls and in-app notifications",
+    "status": "completed"
+  },
+  {
+    "content": "C: Build customer/admin support and notification interfaces",
+    "status": "completed"
+  },
+  {
+    "content": "Fix the reported SIP-trunks URL alias and verify it with the testing agent",
+    "status": "in_progress"
+  },
+  {
+    "content": "C: Verify all modules, documentation and source archive with testing agent",
+    "status": "pending"
+  }
+]

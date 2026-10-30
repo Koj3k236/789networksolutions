@@ -1,5 +1,13 @@
 # Verification record
 
+## A / B / C — current verification
+
+Testing-agent report `iteration_12.json` verified the SIP trunk, API key, support and notification interfaces in their honest disconnected state, including the fixed `/dashboard/sip-trunks/` alias. API/frontend/test TypeScript checks and builds passed. **446 automated checks passed**: 415 behavioral unit/DTO checks with mocked dependencies plus 31 supplemental source checks. **127 PostgreSQL integration tests remain SKIPPED**: trunks 28, API keys 41, support 15, Caller ID 24, original account suite 19. No real database migration, login/persistence workflow, or Redis execution was verified here.
+
+The report's note saying the API-key Generate button was enabled in the disconnected preview is incorrect: a follow-up browser check explicitly returned `is_disabled() == True`. No fake keys, tickets, credentials or approval records are created by the new preview modules. Use `ABC-HANDOFF.md` and the VPS environment examples for the external operator's source handoff; these are not Docker orchestration or a completed deployment.
+
+## Previous Caller ID verification (historical)
+
 ## Caller ID slice — latest verification
 
 Testing-agent report `iteration_7.json` confirms successful API/test TypeScript compilation, **222 automated checks passed** (77 new Caller ID behavioral checks plus 145 previous unit/source checks), and browser verification of the new disconnected-state UI. **43 PostgreSQL integration tests were skipped** (24 new, 19 previous). No migrations or real database workflows were executed. Any percentage fields in automated agent reports describing skipped cases as 100% must not be treated as database verification.

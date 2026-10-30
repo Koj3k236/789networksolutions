@@ -36,7 +36,7 @@ The NestJS server exposes `/api/v1/*`. OpenAPI UI: `/api/docs`; JSON: `/api/open
 
 ## Deliberately unavailable
 
-`POST /calls` returns 501 `CAPABILITY_UNAVAILABLE`; `POST /sip-trunks` returns 501 `PHASE_NOT_IMPLEMENTED`. No transaction, carrier request, or live call is created. Call status/hangup, trunk writes, number provisioning, API key CRUD, signed webhooks, and payment APIs are not implemented in Phase 1 and must not be advertised as working.
+`POST /calls` still returns 501 `CAPABILITY_UNAVAILABLE`. SIP trunk writes, API key management and support ticketing are now implemented in source; see [ABC-HANDOFF.md](ABC-HANDOFF.md) for their complete route list and validation limits. Call status/hangup, live SIP, number provisioning, signed webhooks and payment APIs remain unavailable.
 
 ## Example login
 
@@ -81,7 +81,7 @@ Unknown roles cannot perform this operation. Administrators cannot change their 
 - 403 role/status/origin restrictions.
 - 409 duplicate email.
 - 429 abuse throttle.
-- 501 unimplemented call/trunk capability.
+- 501 unimplemented live call capability.
 - 503 Redis absent for queue operations.
 - Unexpected database errors never trigger sample fallback.
 

@@ -1,0 +1,55 @@
+import {BadRequestException,ConflictException,ForbiddenException,Injectable,NotFoundException} from '@nestjs/common';
+import {Prisma} from '@prisma/client';
+import {PrismaService} from '../common/prisma.service';
+import {ADMIN_ROLES,assertRole,Principal} from '../common/security';
+import {CallerIdService} from '../caller-id/caller-id.service';
+import {AccountLimitsDto,AddIpDto,CreateTrunkDto,UpdateTrunkDto} from './dto';
+import {generateSipCredential,normalizePublicCidr,validateSipHost,validateTrunkLimits} from './policy';
+export const TRUNK_EDIT_ROLES=['SUPER_ADMIN','OPERATIONS_ADMIN'] as const;
+const safeInclude={ips:true,credentials:{select:{username:true,realm:true,algorithm:true,rotatedAt:true}}};
+@Injectable()
+export class TrunksService {
+ constructor(private db:PrismaService,private callerIds:CallerIdService){}
+ private access(orgId:string,actor:Principal,write=false){if(orgId!==actor.organizationId)assertRole(actor.role,write?[...TRUNK_EDIT_ROLES]:ADMIN_ROLES);}
+ private bad<T>(fn:()=>T):T{try{return fn();}catch(e){throw new BadRequestException((e as Error).message);}}
+ private async locked<T>(orgId:string,actor:Principal,fn:(tx:Prisma.TransactionClient,org:any)=>Promise<T>){
+  this.access(orgId,actor,true);
+  try{return await this.db.$transaction(async tx=>{await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${orgId}::uuid FOR UPDATE`;const org=await tx.organization.findUnique({where:{id:orgId}});if(!org)throw new NotFoundException('Customer not found.');if(['SUSPENDED','REJECTED'].includes(org.status))throw new ForbiddenException('Customer is suspended or rejected.');return fn(tx,org);});}catch(e){if(e instanceof Prisma.PrismaClientKnownRequestError&&e.code==='P2002')throw new ConflictException('This trunk name or IP entry already exists, including archived records.');throw e;}
+ }
+ private async trunk(tx:Prisma.TransactionClient,orgId:string,id:string,version?:number){const t=await tx.sipTrunk.findFirst({where:{id,organizationId:orgId,deletedAt:null},include:safeInclude});if(!t)throw new NotFoundException('SIP trunk not found.');if(version!==undefined&&t.version!==version)throw new ConflictException('Trunk changed. Refresh before saving.');return t;}
+ private async audit(tx:Prisma.TransactionClient,orgId:string,actor:Principal,action:string,id:string,data:Prisma.InputJsonObject,ip?:string){await tx.auditLog.create({data:{organizationId:orgId,actorId:actor.id,action,targetId:id,ip,metadata:data}});}
+ private present<T extends object>(trunk:T){return {...trunk,operational:false,serviceStatus:'Pending Upstream Activation'};}
+ async list(orgId:string,actor:Principal){this.access(orgId,actor);return (await this.db.sipTrunk.findMany({where:{organizationId:orgId,deletedAt:null},include:safeInclude,orderBy:{createdAt:'desc'}})).map(t=>this.present(t));}
+ async workspace(orgId:string,actor:Principal){this.access(orgId,actor);const [items,org,caller]=await Promise.all([this.list(orgId,actor),this.db.organization.findUnique({where:{id:orgId},select:{id:true,businessName:true,sipConcurrentLimit:true,sipCpsLimit:true}}),this.callerIds.workspace(orgId,actor)]);if(!org)throw new NotFoundException('Customer not found.');return {items,organization:org,selectableCallerIds:caller.selectableNumbers,callingEnabled:false};}
+ async detail(orgId:string,id:string,actor:Principal){this.access(orgId,actor);const t=await this.trunk(this.db,orgId,id);const audit=await this.db.auditLog.findMany({where:{organizationId:orgId,targetId:id,OR:[{action:{startsWith:'SIP_TRUNK_'}},{action:{startsWith:'CALLER_ID_TRUNK_'}}]},orderBy:{createdAt:'desc'},take:100});return {...this.present(t),audit};}
+ async create(orgId:string,actor:Principal,body:CreateTrunkDto,ip?:string){return this.locked(orgId,actor,async(tx,org)=>{
+  const domain=this.bad(()=>validateSipHost(body.domain));this.bad(()=>validateTrunkLimits(body.maxConcurrent,body.cps,org.sipConcurrentLimit,org.sipCpsLimit));
+  const caller=body.defaultCallerId?await this.callerIds.assertSelectable(tx,org,body.defaultCallerId):null;
+  const t=await tx.sipTrunk.create({data:{organizationId:orgId,name:body.name,description:body.description||'',authType:body.authType,transport:body.transport,domain,maxConcurrent:body.maxConcurrent,cps:body.cps,defaultCallerId:caller,failoverUri:body.failoverUri||null,enabled:false}});
+  let reveal;
+  if(body.authType==='CREDENTIALS'){const generated=generateSipCredential(domain);await tx.sipCredential.create({data:{trunkId:t.id,...generated.persisted}});reveal=generated.reveal;await this.audit(tx,orgId,actor,'SIP_TRUNK_CREDENTIALS_ISSUED',t.id,{oneTimeDisclosure:true,algorithm:'SHA-256'},ip);}
+  await this.audit(tx,orgId,actor,'SIP_TRUNK_CREATED',t.id,{name:t.name,authType:t.authType,maxConcurrent:t.maxConcurrent,cps:t.cps,enabled:false},ip);
+  return {trunk:this.present(await this.trunk(tx,orgId,t.id)),...(reveal?{credentials:reveal}:{})};
+ });}
+ async update(orgId:string,id:string,actor:Principal,body:UpdateTrunkDto,ip?:string){return this.locked(orgId,actor,async(tx,org)=>{
+  const t=await this.trunk(tx,orgId,id,body.expectedVersion);const {expectedVersion,...patch}=body;
+  const domain=this.bad(()=>validateSipHost(patch.domain??t.domain));const authType=patch.authType??t.authType;
+  this.bad(()=>validateTrunkLimits(patch.maxConcurrent??t.maxConcurrent,patch.cps??t.cps,org.sipConcurrentLimit,org.sipCpsLimit));
+  const caller=patch.defaultCallerId===undefined?t.defaultCallerId:patch.defaultCallerId===null?null:await this.callerIds.assertSelectable(tx,org,patch.defaultCallerId);
+  const authChanged=authType!==t.authType||domain!==t.domain;let reveal;
+  if(authChanged){await tx.sipCredential.deleteMany({where:{trunkId:id}});if(authType==='CREDENTIALS'){const generated=generateSipCredential(domain);await tx.sipCredential.create({data:{trunkId:id,...generated.persisted}});reveal=generated.reveal;await this.audit(tx,orgId,actor,'SIP_TRUNK_CREDENTIALS_ISSUED',id,{oneTimeDisclosure:true,reason:'Authentication mode or realm changed.'},ip);}}
+  const updated=await tx.sipTrunk.update({where:{id},data:{...patch,domain,defaultCallerId:caller,failoverUri:patch.failoverUri===undefined?t.failoverUri:patch.failoverUri||null,...(authChanged?{enabled:false}:{}),version:{increment:1}},include:safeInclude});
+  await this.audit(tx,orgId,actor,'SIP_TRUNK_UPDATED',id,{before:{name:t.name,authType:t.authType,domain:t.domain,maxConcurrent:t.maxConcurrent,cps:t.cps,defaultCallerId:t.defaultCallerId},after:{name:updated.name,authType:updated.authType,domain:updated.domain,maxConcurrent:updated.maxConcurrent,cps:updated.cps,defaultCallerId:updated.defaultCallerId},configurationDisabled:authChanged},ip);
+  return {trunk:this.present(updated),...(reveal?{credentials:reveal}:{})};
+ });}
+ async enable(orgId:string,id:string,actor:Principal,enabled:boolean,version:number,ip?:string){return this.locked(orgId,actor,async(tx,org)=>{
+  const t=await this.trunk(tx,orgId,id,version);
+  if(enabled){this.bad(()=>validateTrunkLimits(t.maxConcurrent,t.cps,org.sipConcurrentLimit,org.sipCpsLimit));if(t.authType==='IP'&&!t.ips.length)throw new BadRequestException('Add at least one authorized public IP before enabling configuration.');if(t.authType==='CREDENTIALS'&&!t.credentials)throw new BadRequestException('Generate SIP credentials first.');if(t.defaultCallerId)await this.callerIds.assertSelectable(tx,org,t.defaultCallerId);}
+  const updated=await tx.sipTrunk.update({where:{id},data:{enabled,version:{increment:1}},include:safeInclude});await this.audit(tx,orgId,actor,'SIP_TRUNK_ENABLED_CHANGED',id,{enabled,operational:false},ip);return this.present(updated);
+ });}
+ async rotate(orgId:string,id:string,actor:Principal,version:number,ip?:string){return this.locked(orgId,actor,async(tx)=>{const t=await this.trunk(tx,orgId,id,version);if(t.authType!=='CREDENTIALS')throw new BadRequestException('This trunk uses IP authentication.');const generated=generateSipCredential(t.domain,t.credentials?.username);await tx.sipCredential.upsert({where:{trunkId:id},create:{trunkId:id,...generated.persisted},update:generated.persisted});await tx.sipTrunk.update({where:{id},data:{version:{increment:1}}});await this.audit(tx,orgId,actor,'SIP_TRUNK_CREDENTIALS_ROTATED',id,{oneTimeDisclosure:true,oldCredentialInvalidated:true},ip);return generated.reveal;});}
+ async addIp(orgId:string,id:string,actor:Principal,body:AddIpDto,ip?:string){const cidr=this.bad(()=>normalizePublicCidr(body.cidr));return this.locked(orgId,actor,async(tx)=>{const t=await this.trunk(tx,orgId,id,body.expectedVersion);if(t.ips.length>=100)throw new BadRequestException('Maximum 100 authorized networks per trunk.');const entry=await tx.authorizedIp.create({data:{trunkId:id,cidr}});await tx.sipTrunk.update({where:{id},data:{version:{increment:1}}});await this.audit(tx,orgId,actor,'SIP_TRUNK_IP_ADDED',id,{cidr,entryId:entry.id},ip);return entry;});}
+ async removeIp(orgId:string,id:string,entryId:string,actor:Principal,version:number,ip?:string){return this.locked(orgId,actor,async(tx)=>{const t=await this.trunk(tx,orgId,id,version);const entry=t.ips.find(e=>e.id===entryId);if(!entry)throw new NotFoundException('IP entry not found.');if(t.enabled&&t.authType==='IP'&&t.ips.length===1)throw new ConflictException('Disable the configuration before removing its last authorized IP.');await tx.authorizedIp.delete({where:{id:entryId}});await tx.sipTrunk.update({where:{id},data:{version:{increment:1}}});await this.audit(tx,orgId,actor,'SIP_TRUNK_IP_REMOVED',id,{cidr:entry.cidr},ip);return {removed:true};});}
+ async remove(orgId:string,id:string,actor:Principal,version:number,ip?:string){return this.locked(orgId,actor,async(tx)=>{const t=await this.trunk(tx,orgId,id,version);if(await tx.phoneNumber.count({where:{organizationId:orgId,trunkId:id,status:{not:'RELEASED'}}}))throw new ConflictException('Reassign or release attached numbers before deleting this trunk.');await tx.sipCredential.deleteMany({where:{trunkId:id}});await tx.authorizedIp.deleteMany({where:{trunkId:id}});await tx.sipTrunk.update({where:{id},data:{deletedAt:new Date(),enabled:false,defaultCallerId:null,version:{increment:1}}});await this.audit(tx,orgId,actor,'SIP_TRUNK_DELETED',id,{name:t.name,historyRetained:true,credentialsRemoved:true},ip);return {deleted:true,historyRetained:true};});}
+ async limits(orgId:string,actor:Principal,body:AccountLimitsDto,ip?:string){assertRole(actor.role,[...TRUNK_EDIT_ROLES]);return this.locked(orgId,actor,async(tx,org)=>{if(await tx.sipTrunk.count({where:{organizationId:orgId,deletedAt:null,OR:[{maxConcurrent:{gt:body.concurrent}},{cps:{gt:body.cps}}]}}))throw new ConflictException('Lower the existing trunk limits before reducing account caps.');await tx.organization.update({where:{id:orgId},data:{sipConcurrentLimit:body.concurrent,sipCpsLimit:body.cps}});await this.audit(tx,orgId,actor,'SIP_TRUNK_ACCOUNT_LIMITS_UPDATED',orgId,{before:{concurrent:org.sipConcurrentLimit,cps:org.sipCpsLimit},after:{concurrent:body.concurrent,cps:body.cps},reason:body.reason},ip);return {concurrent:body.concurrent,cps:body.cps};});}
+}

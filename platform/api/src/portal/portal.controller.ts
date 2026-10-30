@@ -15,7 +15,6 @@ export class PortalController {
   @Get('dashboard') dashboard(@Req() req:AuthRequest,@Query('days') days?:string){return this.portal.dashboard(req.user,days===undefined?1:Number(days));}
   @Get('cdr') cdr(@Req() req:AuthRequest,@Query() query:{search?:string;page?:string;status?:string}){return this.portal.cdr(req.user,query);}
   @Get('balance') async balance(@Req() req:AuthRequest){const d=await this.portal.dashboard(req.user);return {balance:d.summary.balance,currency:'USD',mode:'DEMO',realFunds:false};}
-  @Get('sip-trunks') trunks(@Req() req:AuthRequest){return this.db.sipTrunk.findMany({where:{organizationId:req.user.organizationId},select:{id:true,name:true,enabled:true,authType:true,domain:true,transport:true,maxConcurrent:true,mode:true}});}
   @Get('numbers') numbers(@Req() req:AuthRequest){return this.db.phoneNumber.findMany({where:{organizationId:req.user.organizationId}});}
   @Get('rates') rates(){return new MockCarrierAdapter().getRates();}
   @Get('login-history') history(@Req() req:AuthRequest){return this.db.loginHistory.findMany({where:{userId:req.user.id},orderBy:{createdAt:'desc'},take:30});}
@@ -23,7 +22,6 @@ export class PortalController {
   dataset(@Req() req:AuthRequest){return loadDemoDataset(this.db,req.user.organizationId,req.user.id);}
   @Post('demo/jobs') jobs(@Req() req:AuthRequest){return this.queue.enqueue(req.user.organizationId,req.user.id);}
   @Post('calls') unavailable(){throw new HttpException({code:'CAPABILITY_UNAVAILABLE',message:'Call initiation is not implemented in Phase 1. No upstream carrier is connected; no call was placed.'},501);}
-  @Post('sip-trunks') trunkWrite(){throw new HttpException({code:'PHASE_NOT_IMPLEMENTED',message:'Trunk creation is scheduled for Phase 2. No SIP endpoint is operational.'},501);}
   @Post('numbers/search') searchNumbers(){return new MockCarrierAdapter().getAvailableNumbers();}
   @Public() @Post('contact') @Throttle({default:{limit:3,ttl:60000}})
   async contact(@Body() body:ContactDto){await this.db.contactRequest.create({data:body});return {message:'Your inquiry was saved. Email notification is not connected.'};}

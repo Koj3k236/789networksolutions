@@ -1,5 +1,21 @@
 # 789 NETWORK SOLUTIONS — Product continuity
 
+## Latest A / B / C source delivery — supersedes older pending-module lists
+
+User explicitly required SIP Trunk Management first, API Key Management second, Support Ticketing third, all in one delivery. All three source slices are now implemented; they are NOT deployed or PostgreSQL-accepted.
+
+- A: api/src/trunks {policy,DTO,service,controllers}, complete config CRUD, disabled-by-default/config-vs-operational flag, tenant/account caps20/2, publicIP/CIDR normalization/restrictions, encryptedSHA256SIPHA1/onetimepassword androtation, softdeletepreservingCDR, independentCallerIDassertSelectable, orgrowlocks/revisions/audit. New /dashboard/trunks,/dashboard/sip-trunks alias,/admin/trunks pages. ExistingCallerID filtersdeletedtrunks andincrementsrevision fordefaultchanges. Softdeletednames remainreserved. Newmigration20261101000000.
+- B: api/src/api-keys service/DTO/guard/interceptor/controllers. Owner+tenant scoped256bitkeys, SHA256hashonly, prefixmetadata, expiries/default90d,25activecap, atomicrotation/revoke, scoped /api/v1/automation endpoints. Noadmin/keymanagement/livecalling scopes. SanitizedAPIusagelog. /dashboard/api-keys. Newmigration20261101010000. ApiKeyGuard handlesfullExpressroutepathswithoutdoubleprefix.
+- C: api/src/support service/DTO/controllers, ticketthreads/priority/status/assignment/customerclose-reopen, adminsupportroles, versionedrowlocks and transactional audits/recipientin-appnotifications. No email/SMS/attachments. Inactiveassigneefallbacktosupportpool. /dashboard/support,/admin/support,/dashboard/notifications; managementbelllink. Newmigration20261101020000.
+- UserVPS target789networksolutions.com at201.79.46.149 unchanged. NoSSH/inventory/domain/TLS/provisioning/deploymentperformed;22notverified. Docker/Compose/Nginx/TLSconfigs notcreated dueoperationalboundary. NewdocsABC-HANDOFF.md explains source, migration/env operatorcommands/readonlyinventorydiagnostics andremaininginfrastructure. .env.vps.example andweb/.env.production.example areexamplesonly, no realcredentials.
+- Latesttestingreport iteration12:446passed(415behaviorunit/DTO+31source),127PGintegrationSKIPPED(28trunk+41keys+15support+24callerID+19original). API/frontend/testTS and50staticpagesbuildpassed. Disconnected UI/routealiasverifiedbytestingagent, notrealDBworkflows. Report12noteGenerateAPIkeybuttonenabledwaswrong: mainscreenshot explicitlyverifieddisabledtrue. Earlierreportsnumbersarehistorical.
+- Mainreviewedandcorrected integrationtestmistakes: trunkexpectedmessages->HTTPstatuses; test-onlyencryptionenvsetup; supportguardedcleanupbyknownorgrelationsbeforeticketdelete; explicitcross-tenantdetaildenial. SuitesstillUNEXECUTEDagainstPG; neverclaimtheypassed. NullDTOpatchfieldsrejectedwithoutPrisma500; allowednullableclearfields remainvalid. AllknownreportedUIissuesresolvedbyagentverification.
+- Updatedsourcezipincludesallmodules/migrations/tests/docs/envexamples, no actualsecrets/dependencies/buildoutput. NEXT_PUBLIC_PREVIEW=true ispreviewonly, falseconnectedsourceusesrealNestPostgres. Existinglegacydemodashboardpreserved, newmodulesneverfabricatedrecords.
+
+### Required acceptance before declaring live/production ready
+Supply real isolated PostgreSQL test connection andapplication connection, applymigrations safely, execute127database tests/fixfailures, validate connectedbrowser persistentworkflows/logout-login, verifyRedisworker, externaloperatorprovisionsappropriatehosting/TLS/backups/monitoring. SIPtraffic andproviderdependentservicesmuststayclosed.
+
+
 ### Final Caller ID handoff
 Latest testing report: /app/test_reports/iteration_7.json. API/test TypeScript checks and222 automated checks passed;43 DB integration tests remain SKIPPED. Browser checks verified disconnected-state forms do not claim saved data and prior dashboard is unchanged. Report percentage fields incorrectly call skipped integrations100%; ignore that: no PostgreSQL operation was verified. Newbuild contains44 static pages. Source ZIP repack includes Caller ID source/migration/tests/docs. No operational activation is claimed.
 

@@ -1,0 +1,635 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum CallerIdPermissionStatus {
+  DISABLED
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+enum CallerIdRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+enum CallerIdAuthorizationStatus {
+  PENDING
+  AUTHORIZED
+  REJECTED
+  REVOKED
+}
+model CallerIdPermissionRequest {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  requestedById String @db.Uuid
+  requestedBy User @relation("CallerIdRequester", fields:[requestedById], references:[id])
+  justification String
+  status CallerIdRequestStatus @default(PENDING)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  reviewedById String? @db.Uuid
+  reviewedBy User? @relation("CallerIdReviewer", fields:[reviewedById], references:[id], onDelete:SetNull)
+  reviewedAt DateTime? @db.Timestamptz(3)
+  decisionNotes String?
+  @@index([organizationId, status, createdAt])
+  @@map("caller_id_permission_requests")
+}
+
+enum Mode {
+  DEMO
+  STAGING
+  PRODUCTION
+}
+enum AccountStatus {
+  PENDING_VERIFICATION
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+enum Role {
+  CUSTOMER
+  RESELLER
+  SUPER_ADMIN
+  OPERATIONS_ADMIN
+  BILLING_ADMIN
+  COMPLIANCE_ADMIN
+  SUPPORT_AGENT
+}
+enum NumberStatus {
+  AVAILABLE
+  RESERVED
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  RELEASED
+}
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  businessName String
+  country String
+  phone String
+  address String
+  website String?
+  registrationNumber String?
+  taxIdEncrypted String?
+  status AccountStatus @default(PENDING_VERIFICATION)
+  mode Mode @default(DEMO)
+  productionEnabled Boolean @default(false)
+  parentId String? @db.Uuid
+  parent Organization? @relation("Resellers", fields: [parentId], references: [id])
+  children Organization[] @relation("Resellers")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  users User[]
+  kyc KycRequest[]
+  trunks SipTrunk[]
+  sipConcurrentLimit Int @default(20)
+  sipCpsLimit Int @default(2)
+  callerIds CallerId[]
+  externalCallerIdPassthroughEnabled Boolean @default(false)
+  allowPerCallCallerIdSelection Boolean @default(false)
+  requireAdditionalCallerIdReview Boolean @default(true)
+  callerIdPermissionStatus CallerIdPermissionStatus @default(DISABLED)
+  callerIdApprovalNotes String?
+  callerIdPermissionsUpdatedAt DateTime? @db.Timestamptz(3)
+  callerIdPermissionsUpdatedById String? @db.Uuid
+  callerIdPermissionsUpdatedBy User? @relation("CallerIdSettingsEditor", fields:[callerIdPermissionsUpdatedById], references:[id], onDelete:SetNull)
+  callerIdPermissionVersion Int @default(0)
+  callerIdPermissionRequests CallerIdPermissionRequest[]
+  numbers PhoneNumber[]
+  orders NumberOrder[]
+  ports PortingRequest[]
+  rates CustomerRatePlan[]
+  calls CallSession[]
+  cdrs CallDetailRecord[]
+  wallets Wallet[]
+  payments Payment[]
+  invoices Invoice[]
+  keys ApiKey[]
+  webhooks Webhook[]
+  tickets SupportTicket[]
+  fraud FraudAlert[]
+  audit AuditLog[]
+  @@index([status, createdAt])
+  @@map("organizations")
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  email String @unique
+  fullName String
+  passwordHash String
+  role Role @default(CUSTOMER)
+  emailVerified Boolean @default(false)
+  totpEncrypted String?
+  totpEnabled Boolean @default(false)
+  totpLastStep BigInt?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  sessions RefreshToken[]
+  tokens ActionToken[]
+  logins LoginHistory[]
+  callerIdSettingsEdited Organization[] @relation("CallerIdSettingsEditor")
+  callerIdRequestsSubmitted CallerIdPermissionRequest[] @relation("CallerIdRequester")
+  callerIdRequestsReviewed CallerIdPermissionRequest[] @relation("CallerIdReviewer")
+  callerIdVerifications CallerIdVerification[] @relation("CallerIdNumberReviewer")
+  @@index([organizationId])
+  @@map("users")
+}
+model RoleDefinition {
+  id String @id @default(uuid()) @db.Uuid
+  name Role @unique
+  permissions RolePermission[]
+  @@map("roles")
+}
+model Permission {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  roles RolePermission[]
+  @@map("permissions")
+}
+model RolePermission {
+  roleId String @db.Uuid
+  permissionId String @db.Uuid
+  role RoleDefinition @relation(fields:[roleId], references:[id])
+  permission Permission @relation(fields:[permissionId], references:[id])
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  hash String @unique
+  expiresAt DateTime @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+model ActionToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  hash String @unique
+  purpose String
+  expiresAt DateTime @db.Timestamptz(3)
+  usedAt DateTime? @db.Timestamptz(3)
+  @@index([userId, purpose])
+  @@map("action_tokens")
+}
+model DevelopmentMessage {
+  id String @id @default(uuid()) @db.Uuid
+  recipient String
+  subject String
+  bodyEncrypted String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("development_outbox")
+}
+model LoginHistory {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields:[userId], references:[id])
+  ip String
+  userAgent String
+  successful Boolean
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([userId, createdAt])
+  @@map("login_history")
+}
+model KycRequest {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  status AccountStatus @default(UNDER_REVIEW)
+  reviewerId String? @db.Uuid
+  notes String?
+  documentObjectKeys String[]
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  reviewedAt DateTime? @db.Timestamptz(3)
+  @@index([organizationId, status])
+  @@map("kyc_requests")
+}
+model SipTrunk {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  name String
+  description String @default("")
+  version Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  enabled Boolean @default(false)
+  mode Mode @default(DEMO)
+  authType String @default("IP")
+  domain String @default("sip.example.com")
+  transport String @default("TLS")
+  maxConcurrent Int @default(5)
+  cps Int @default(1)
+  callerIdPolicy String @default("VERIFIED_ONLY")
+  defaultCallerId String?
+  failoverUri String?
+  credentials SipCredential?
+  ips AuthorizedIp[]
+  numbers PhoneNumber[]
+  calls CallSession[]
+  cdrs CallDetailRecord[]
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+  @@map("sip_trunks")
+}
+model SipCredential {
+  id String @id @default(uuid()) @db.Uuid
+  trunkId String @unique @db.Uuid
+  trunk SipTrunk @relation(fields:[trunkId], references:[id], onDelete:Cascade)
+  username String @unique
+  digestEncrypted String
+  realm String @default("sip.example.com")
+  algorithm String @default("SHA-256")
+  rotatedAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("sip_credentials")
+}
+model AuthorizedIp {
+  id String @id @default(uuid()) @db.Uuid
+  trunkId String @db.Uuid
+  trunk SipTrunk @relation(fields:[trunkId], references:[id], onDelete:Cascade)
+  cidr String
+  @@unique([trunkId, cidr])
+  @@map("authorized_ips")
+}
+model CallerId {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  number String
+  verified Boolean @default(false)
+  authorizationRef String?
+  stirStatus String @default("UNVERIFIED")
+  status CallerIdAuthorizationStatus @default(PENDING)
+  submittedAuthorization String?
+  additionalReviewAt DateTime? @db.Timestamptz(3)
+  expiresAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  version Int @default(0)
+  verifications CallerIdVerification[]
+  @@unique([organizationId, number])
+  @@map("caller_ids")
+}
+model CallerIdVerification {
+  id String @id @default(uuid()) @db.Uuid
+  callerIdId String @db.Uuid
+  callerId CallerId @relation(fields:[callerIdId], references:[id])
+  method String
+  result String
+  evidenceObjectKey String?
+  evidenceReference String?
+  notes String?
+  reviewedById String? @db.Uuid
+  reviewedBy User? @relation("CallerIdNumberReviewer", fields:[reviewedById], references:[id], onDelete:SetNull)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("caller_id_verifications")
+}
+model PhoneNumber {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String? @db.Uuid
+  organization Organization? @relation(fields:[organizationId], references:[id])
+  number String
+  mode Mode @default(DEMO)
+  kind String @default("LOCAL")
+  status NumberStatus @default(AVAILABLE)
+  state String?
+  city String?
+  monthlyCharge Decimal @default(0) @db.Decimal(18,6)
+  trunkId String? @db.Uuid
+  trunk SipTrunk? @relation(fields:[trunkId, organizationId], references:[id, organizationId])
+  inboundUri String?
+  backupUri String?
+  orders NumberOrder[]
+  @@unique([number, mode])
+  @@index([organizationId, status])
+  @@map("phone_numbers")
+}
+model NumberOrder {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  numberId String @db.Uuid
+  number PhoneNumber @relation(fields:[numberId], references:[id])
+  idempotencyKey String @unique
+  status String @default("PENDING")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("number_orders")
+}
+model PortingRequest {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  numbers String[]
+  losingCarrier String
+  authorizationObjectKey String?
+  status String @default("SUBMITTED")
+  focAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, status])
+  @@map("porting_requests")
+}
+model UpstreamCarrier {
+  id String @id @default(uuid()) @db.Uuid
+  name String @unique
+  adapterType String
+  enabled Boolean @default(false)
+  verified Boolean @default(false)
+  sipHost String?
+  sipPort Int @default(5061)
+  transport String @default("TLS")
+  apiBaseUrl String?
+  supportedDestinations String[]
+  codecs String[]
+  callerIdPolicies String[]
+  concurrentLimit Int @default(0)
+  cpsLimit Int @default(0)
+  lastHealthAt DateTime? @db.Timestamptz(3)
+  credentials UpstreamCredential[]
+  capabilities CarrierCapability[]
+  routes CarrierRoute[]
+  rates RateDeck[]
+  cdrs CallDetailRecord[]
+  @@map("upstream_carriers")
+}
+model UpstreamCredential {
+  id String @id @default(uuid()) @db.Uuid
+  carrierId String @db.Uuid
+  carrier UpstreamCarrier @relation(fields:[carrierId], references:[id], onDelete:Cascade)
+  name String
+  ciphertext String
+  keyVersion Int @default(1)
+  rotatedAt DateTime @default(now()) @db.Timestamptz(3)
+  @@unique([carrierId, name])
+  @@map("upstream_credentials")
+}
+model CarrierCapability {
+  id String @id @default(uuid()) @db.Uuid
+  carrierId String @db.Uuid
+  carrier UpstreamCarrier @relation(fields:[carrierId], references:[id], onDelete:Cascade)
+  name String
+  verified Boolean @default(false)
+  evidence String?
+  @@unique([carrierId, name])
+  @@map("carrier_capabilities")
+}
+model CarrierRoute {
+  id String @id @default(uuid()) @db.Uuid
+  carrierId String @db.Uuid
+  carrier UpstreamCarrier @relation(fields:[carrierId], references:[id])
+  prefix String
+  priority Int @default(100)
+  enabled Boolean @default(false)
+  mode Mode @default(DEMO)
+  @@index([prefix, mode, enabled])
+  @@map("carrier_routes")
+}
+model RateDeck {
+  id String @id @default(uuid()) @db.Uuid
+  carrierId String? @db.Uuid
+  carrier UpstreamCarrier? @relation(fields:[carrierId], references:[id])
+  name String
+  currency String @default("USD")
+  mode Mode @default(DEMO)
+  effectiveAt DateTime @db.Timestamptz(3)
+  entries RateEntry[]
+  plans CustomerRatePlan[]
+  @@map("rate_decks")
+}
+model RateEntry {
+  id String @id @default(uuid()) @db.Uuid
+  rateDeckId String @db.Uuid
+  deck RateDeck @relation(fields:[rateDeckId], references:[id], onDelete:Cascade)
+  prefix String
+  destination String
+  perMinute Decimal @db.Decimal(18,6)
+  connectionFee Decimal @default(0) @db.Decimal(18,6)
+  minimumCharge Decimal @default(0) @db.Decimal(18,6)
+  incrementSeconds Int @default(6)
+  minimumSeconds Int @default(6)
+  @@unique([rateDeckId, prefix])
+  @@map("rate_entries")
+}
+model CustomerRatePlan {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  rateDeckId String @db.Uuid
+  deck RateDeck @relation(fields:[rateDeckId], references:[id])
+  markupPercent Decimal @default(0) @db.Decimal(8,4)
+  @@unique([organizationId, rateDeckId])
+  @@map("customer_rate_plans")
+}
+model CallSession {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  trunkId String? @db.Uuid
+  trunk SipTrunk? @relation(fields:[trunkId, organizationId], references:[id, organizationId])
+  mode Mode @default(DEMO)
+  source String
+  destination String
+  status String
+  startedAt DateTime @default(now()) @db.Timestamptz(3)
+  events CallEvent[]
+  cdr CallDetailRecord?
+  @@unique([id, organizationId])
+  @@index([organizationId, mode, status])
+  @@map("call_sessions")
+}
+model CallEvent {
+  id String @id @default(uuid()) @db.Uuid
+  callId String @db.Uuid
+  call CallSession @relation(fields:[callId], references:[id])
+  type String
+  payload Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([callId, createdAt])
+  @@map("call_events")
+}
+model CallDetailRecord {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  callId String? @unique @db.Uuid
+  call CallSession? @relation(fields:[callId, organizationId], references:[id, organizationId])
+  trunkId String? @db.Uuid
+  trunk SipTrunk? @relation(fields:[trunkId, organizationId], references:[id, organizationId])
+  carrierId String? @db.Uuid
+  carrier UpstreamCarrier? @relation(fields:[carrierId], references:[id])
+  mode Mode @default(DEMO)
+  source String
+  destination String
+  callerId String
+  direction String @default("OUTBOUND")
+  startTime DateTime @db.Timestamptz(3)
+  answerTime DateTime? @db.Timestamptz(3)
+  endTime DateTime @db.Timestamptz(3)
+  duration Int
+  billableDuration Int
+  status String
+  sipCode Int
+  upstreamCost Decimal @db.Decimal(18,6)
+  customerRate Decimal @db.Decimal(18,6)
+  customerCharge Decimal @db.Decimal(18,6)
+  grossMargin Decimal @db.Decimal(18,6)
+  disconnectReason String
+  idempotencyKey String @unique
+  reconciledAt DateTime? @db.Timestamptz(3)
+  @@unique([callId, organizationId])
+  @@index([organizationId, mode, startTime])
+  @@map("call_detail_records")
+}
+model Wallet {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  mode Mode @default(DEMO)
+  currency String @default("USD")
+  creditLimit Decimal @default(0) @db.Decimal(18,6)
+  lowBalanceThreshold Decimal @default(25) @db.Decimal(18,6)
+  entries LedgerEntry[]
+  @@unique([organizationId, mode, currency])
+  @@map("wallets")
+}
+model LedgerEntry {
+  id String @id @default(uuid()) @db.Uuid
+  walletId String @db.Uuid
+  wallet Wallet @relation(fields:[walletId], references:[id])
+  amount Decimal @db.Decimal(18,6)
+  kind String
+  description String
+  idempotencyKey String @unique
+  referenceId String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([walletId, createdAt])
+  @@map("ledger_entries")
+}
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  providerRef String? @unique
+  amount Decimal @db.Decimal(18,6)
+  currency String
+  mode Mode @default(DEMO)
+  status String @default("PENDING")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("payments")
+}
+model Invoice {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  number String @unique
+  subtotal Decimal @db.Decimal(18,6)
+  tax Decimal @db.Decimal(18,6)
+  total Decimal @db.Decimal(18,6)
+  currency String
+  mode Mode @default(DEMO)
+  status String @default("DRAFT")
+  issuedAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("invoices")
+}
+model ApiKey {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  name String
+  prefix String
+  hash String @unique
+  scopes String[]
+  revokedAt DateTime? @db.Timestamptz(3)
+  expiresAt DateTime? @db.Timestamptz(3)
+  @@index([organizationId])
+  @@map("api_keys")
+}
+model Webhook {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  url String
+  secretEncrypted String
+  events String[]
+  enabled Boolean @default(false)
+  deliveries WebhookDelivery[]
+  @@map("webhooks")
+}
+model WebhookDelivery {
+  id String @id @default(uuid()) @db.Uuid
+  webhookId String @db.Uuid
+  webhook Webhook @relation(fields:[webhookId], references:[id])
+  eventId String
+  attempt Int @default(0)
+  statusCode Int?
+  payload Json
+  nextAttemptAt DateTime? @db.Timestamptz(3)
+  @@unique([webhookId, eventId, attempt])
+  @@map("webhook_deliveries")
+}
+model SupportTicket {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  category String
+  subject String
+  description String
+  priority String @default("NORMAL")
+  status String @default("OPEN")
+  assignedTo String? @db.Uuid
+  attachmentObjectKeys String[]
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, status])
+  @@map("support_tickets")
+}
+model FraudAlert {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  organization Organization @relation(fields:[organizationId], references:[id])
+  rule String
+  severity String
+  status String @default("OPEN")
+  details Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, status])
+  @@map("fraud_alerts")
+}
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String? @db.Uuid
+  organization Organization? @relation(fields:[organizationId], references:[id])
+  actorId String? @db.Uuid
+  action String
+  targetId String?
+  ip String?
+  metadata Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+model SystemSetting {
+  key String @id
+  value Json
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  @@map("system_settings")
+}
+model ContactRequest {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  email String
+  message String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  @@map("contact_requests")
+}

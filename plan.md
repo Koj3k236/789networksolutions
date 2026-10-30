@@ -1,4 +1,4 @@
-# plan.md — 789 NETWORK SOLUTIONS (Updated: Caller ID slice + Live Platform Activation + VPS Deployment Request)
+# plan.md — 789 NETWORK SOLUTIONS (Updated: Caller ID slice + Live Platform Activation request + VPS deployment constraints + SIP Trunk Priority)
 
 ## 1) Objectives
 
@@ -11,25 +11,27 @@
 
 - Preserve all currently working Phase 1 modules; **do not modify unrelated modules** except where integration requires (types, navigation, RBAC wiring, audit logging, shared DTOs).
 
-- Implement carrier‑independent **platform readiness**:
+- Implement carrier‑independent **platform readiness** (once PostgreSQL is connected):
   - Customer/admin operations must be database‑backed and persistent
   - Carrier‑dependent telecom operations (calling, DID provisioning, etc.) remain disabled/fail‑closed until verified upstream exists
 
-- Provide a path to remove “DEMO/Read‑only” labels **only when** the corresponding environment is actually connected to PostgreSQL/Redis and end‑to‑end flows are verified.
+- Provide a path to remove “DEMO/Read‑only” labels **only when** the corresponding environment is actually connected to PostgreSQL/Redis and end‑to‑end flows are verified (no renaming/hiding while still mocked).
 
-- Add a realistic, auditable **Caller ID permission management** system (already implemented in source) that:
-  - Defaults OFF for external passthrough
-  - Separates customer permission from number authorization evidence and carrier policy
-  - Produces complete audit logs and safe fail‑closed routing decisions
+- Deliver in required order:
+  - **Caller ID Permission Management:** ✅ source implemented (calling still disabled)
+  - **Phase A:** SIP Trunk Management ✅ source implemented (calling still disabled)
+  - **Phase B:** API Key Management ✅ source implemented (scoped automation only)
+  - **Phase C:** Support Ticketing 🚧 in progress
 
 **Current status note (truthful):**
-- **Caller ID permission source slice is COMPLETE** (schema + migration + APIs + UI + tests + docs).
-- In the managed preview environment, **PostgreSQL/Redis are not connected** (credentials were skipped earlier). Therefore:
-  - All PostgreSQL integration tests are correctly **SKIPPED**, not passed.
-  - Managed preview must remain “read‑only / not connected” and must not pretend to be live.
-- User now requests **VPS deployment** (201.79.46.149) with Docker/PostgreSQL/Redis/Nginx.
-  - **No SSH connectivity has been performed**, port 22 is not verified.
-  - The requested VPS provisioning/deployment steps are **outside this agent’s permitted scope** (no remote server administration from here). This plan therefore treats VPS deployment as **BLOCKED** and provides a safe handoff approach.
+- **Caller ID Permission Management is COMPLETE in source** (schema + migration + APIs + UI + tests + docs).
+- **Phase A SIP Trunk Management is COMPLETE in source** (schema + migration + APIs + UI + tests + docs).
+- **Phase B API Key Management is COMPLETE in source** (schema + migration + APIs + UI + tests + docs).
+- Managed preview is a static export and **not connected** to PostgreSQL/Redis; therefore DB integration tests are **SKIPPED**, not passed.
+- User requests external VPS deployment (domain `789networksolutions.com`, VPS `201.79.46.149`) and expects Docker/PostgreSQL/Redis/Nginx/TLS.
+  - **No SSH connectivity has been performed**.
+  - **External VPS provisioning/deployment, Docker/infrastructure configuration, TLS, and remote execution are outside the permitted scope.**
+  - Permitted deliverables are **application source**, **Prisma migrations**, **env examples**, and **honest handoff documentation**. We do **not** promise or claim a production deployment package or a deployed live system.
 
 ---
 
@@ -43,7 +45,7 @@ Core risk = multi‑tenant auth + RBAC + audit + idempotent ledger writes.
 - JWT access + hashed rotating refresh token sessions.
 - RBAC guard + tenant scoping derived from DB session.
 - Audit logs.
-- Ledger model and demo billing arithmetic.
+- Ledger model and billing arithmetic.
 
 ✅ Unit test suite exists and passes (DB‑gated integration tests skip without PostgreSQL).
 
@@ -52,145 +54,212 @@ Core risk = multi‑tenant auth + RBAC + audit + idempotent ledger writes.
 ### Phase 2 — V1 App Development (Phase 1 deliverable) ✅ SOURCE IMPLEMENTATION COMPLETE
 > Built around auth/tenant core. Managed preview is a static export; connected mode is database‑backed.
 
-✅ Backend (NestJS) and ✅ Frontend (Next.js) implemented for Phase 1.
+✅ Backend (NestJS) and ✅ Frontend (Next.js) implemented for Phase 1 foundation.
 
-**Important limitation:** Platform is not “live” until PostgreSQL/Redis are actually provisioned and connected.
+**Important limitation:** Platform is not “live” until PostgreSQL/Redis are provisioned and connected and DB tests are executed.
 
 ---
 
 ### Phase 3 — Caller ID Permission Management ✅ SOURCE IMPLEMENTATION COMPLETE
-> This work was scoped to Caller ID permission/authorization management and intentionally did not rebuild unrelated modules.
+> Scoped to Caller ID permission/authorization management; did not rebuild unrelated modules.
 
 #### 3.1 Requirements recap (authoritative)
 - Default for all new customers: **External Caller ID Passthrough = OFF**.
-- Admin‑controlled settings under Customer Management → Caller ID Permissions:
-  - External Caller ID Passthrough ON/OFF
-  - Allow Per‑Call Caller ID Selection ON/OFF
-  - Require Additional Caller ID Review ON/OFF
-  - Permission Status, Approval Notes
-  - Authorized Number Inventory
-  - Last Modified By / Date
-- Customer request workflow to enable passthrough; admin approve/reject.
-- SIP trunk integration: shared policy across trunks; validate authorization; reject unauthorized Caller ID.
-- Carrier compatibility is independent and must still block unsupported behavior.
-- No upstream carrier exists: calling remains unavailable.
+- Admin‑controlled settings: passthrough, per‑call selection, additional review, status, notes, authorized inventory, last modified.
+- Customer request workflow; admin approve/reject.
+- Trunk integration: shared org policy; validate authorization; reject unauthorized caller IDs.
+- Carrier compatibility enforced independently.
+- No upstream carrier: calling remains unavailable.
 
-✅ Implemented approach: documented authorization review (admin records evidence reference + outcome; no verification calls implied).
+✅ Implemented: documented authorization review (admin records evidence reference + outcome).
 
 #### 3.2 Database (Prisma/PostgreSQL) ✅ schema + additive migration implemented
-✅ Added:
-- Org permission defaults (DB‑level defaults)
-- Normalized `CallerIdPermissionRequest` + partial unique index for one pending request per org
-- Caller ID authorization status + review metadata + optimistic versioning
-- Constraints ensuring “enabled implies approved”
-
-Migration file:
 - `prisma/migrations/20261029000000_caller_id_permissions/migration.sql`
+- Defaults OFF/OFF/ON, normalized requests, authorization status, reviewer fields, optimistic versions, constraints.
 
-**Important:** Migration generation/validation complete; actual application to PostgreSQL is **UNVERIFIED** here.
+**Important:** migration generation/validation complete; DB application is **UNVERIFIED** here.
 
 #### 3.3 Backend API (NestJS) ✅ implemented
-✅ Added caller-id module:
-- `api/src/caller-id/policy.ts`, `dto.ts`, `caller-id.service.ts`, `caller-id.controller.ts`
-- Wired into `api/src/app.module.ts`
-
-Key behavior:
-- Only SUPER_ADMIN / COMPLIANCE_ADMIN can approve/reject or modify customer permission state.
-- Row locks + optimistic versions.
-- Carrier compatibility gate evaluated separately.
-- `routingAllowed` always false; calling remains unavailable.
+- `/api/v1/caller-id/*` and `/api/v1/admin/caller-id/*`
+- SUPER_ADMIN/COMPLIANCE_ADMIN edit; others read-only.
+- Row locks + optimistic versions; audited.
+- `routingAllowed` always false.
 
 #### 3.4 Frontend (Next.js) ✅ implemented
-✅ Pages:
-- Customer: `/dashboard/caller-ids/`
-- Admin: `/admin/caller-id-permissions/?customer=UUID`
-- Admin customer detail links to Caller ID permissions.
+- Customer `/dashboard/caller-ids/`
+- Admin `/admin/caller-id-permissions/?customer=UUID`
 
 Preview behavior:
-- Shows an honest “database not connected” state when not authenticated/connected.
-- Does not fabricate customer requests/inventory.
+- Honest DB-not-connected state for these pages (no fabricated Caller ID records).
 
 #### 3.5 Tests ✅ completed within environment limits
-- 222 unit/source tests pass
-- 43 PostgreSQL integration tests are **SKIPPED** (no TEST_DATABASE_URL)
-- Testing agent verification report: `/app/test_reports/iteration_7.json`
+- Caller ID unit/service/policy tests pass.
+- DB integration tests are present but **SKIPPED** without PostgreSQL.
 
 ---
 
 ## 3) Next Actions (immediate)
 
 ### 3.1 Live Platform Activation (carrier‑independent) — SOURCE WORK STILL NEEDED ❌ NOT COMPLETE
-The user requested these modules be fully operational with PostgreSQL + Redis:
-- Customer registration/login/profile
-- Admin approvals/permissions
-- SIP trunk CRUD + credential/IP auth config (storage only; no SIP connectivity claims)
-- API key management
-- KYC/KYB submission + review
-- Upstream carrier configuration UI + encrypted credential storage + rate import plumbing
-- Billing configuration + internal ledger
-- Support ticket management
-- Audit logs
+User requests a fully operational carrier‑independent platform (accounts, admin, trunk config, caller ID, etc.) backed by PostgreSQL + Redis.
 
-**Current reality:**
-- Some are implemented (auth, admin customer review, audit, ledger foundation, Caller ID slice).
-- Several remain **unfinished** (full SIP trunk CRUD flows, API key module, support tickets module UI/API, upstream carrier configuration UI/API, billing/invoicing workflows, KYC/KYB document flows).
+**Current reality (source status):**
+- Implemented in source:
+  - Auth/session, admin customer review, audit, ledger foundation
+  - Caller ID permissions + authorization workflows
+  - SIP trunk configuration module
+  - API key management (scoped automation boundary)
+- Still required in source to reach requested scope:
+  - **Phase C: Support ticketing** (in progress)
+  - (Additional platform modules requested earlier but not yet built in source: upstream carrier management CRUD/UI, KYC/KYB submission/review flows, expanded billing/invoices beyond ledger foundation)
 
-**Planned work (inside application source, allowed scope):**
-1. Implement remaining CRUD modules in NestJS + Next.js with full persistence contracts:
-   - SIP trunks CRUD + credentials rotation + authorized IPs
-   - API keys CRUD (hashed storage, scoped permissions)
-   - KYC/KYB request submissions (metadata only until secure uploads exist)
-   - Support tickets CRUD + replies (attachments deferred)
-   - Upstream carriers CRUD + encrypted creds + capability flags (still no real carrier actions without integration)
-   - Billing admin adjustments + invoices scaffolding (no payment gateway)
-2. Convert existing “demo dataset” UX to an explicit **dev-only seed tool** (not default).
-3. Add real platform health endpoints:
-   - DB connectivity check
-   - Redis connectivity check
-   - Worker queue check
-   - Strict status display rules (Operational only when checks pass)
+---
 
-**Acceptance gate:** must run against real PostgreSQL/Redis and pass full integration tests.
+### 3.2 Phase A — SIP Trunk Management ✅ SOURCE IMPLEMENTATION COMPLETE (Calling still disabled)
+**Goal:** Full CRUD and configuration persistence for SIP trunks without enabling actual SIP traffic.
 
-### 3.2 PostgreSQL/Redis Integration Validation ❌ BLOCKED IN THIS ENVIRONMENT
-To legitimately remove “DEMO/read‑only” messaging:
-- Provide:
+#### A1) Database & Prisma ✅
+- Added/extended schema for:
+  - `sip_trunks`: description, version, created/updated timestamps, soft-delete `deletedAt`
+  - `sip_credentials`: stores encrypted SHA‑256 HA1 digest (not plaintext), realm + algorithm metadata
+  - `authorized_ips`: canonicalized public IPv4/IPv6 CIDR allowlist
+  - account caps on org: `sipConcurrentLimit`, `sipCpsLimit`
+- Additive migration:
+  - `prisma/migrations/20261101000000_trunk_management/migration.sql`
+
+**Important:** migration generation/validation complete; DB application is **UNVERIFIED** here.
+
+#### A2) Backend modules/APIs (NestJS) ✅
+- Implemented:
+  - Customer: `/api/v1/sip-trunks/*` (workspace, list/detail, create/update/delete, enable toggle, rotate credentials, add/remove IPs)
+  - Admin cross-tenant: `/api/v1/admin/customers/:orgId/sip-trunks/*` plus account caps update
+- Security:
+  - Tenant isolation enforced; admin actions require SUPER_ADMIN or OPERATIONS_ADMIN write roles
+  - Row locks + optimistic versions + full audit
+- Caller ID integration:
+  - Validates `defaultCallerId` via Caller ID authorization/permissions
+  - Auto-clears invalid defaults with audit when policy changes or number revoked
+- Hard rule:
+  - `operational=false` always
+  - status always `Pending Upstream Activation`
+
+#### A3) Frontend UI (Next.js) ✅
+- Customer `/dashboard/trunks/`:
+  - list/search/filter, create/edit, enable/disable config, IP allowlist management, one-time credential reveal/rotation, audit view, empty/error states
+- Admin `/admin/trunks/`:
+  - org picker, manage customer trunks and account caps
+
+Preview behavior:
+- Honest DB-not-connected state (forms inspectable; actions disabled; no fabricated persistence).
+
+#### A4) Tests ✅ within environment limits
+- Testing agent iteration_8:
+  - **77 new trunk unit tests pass**.
+  - Trunk DB integration tests created (28) but **SKIPPED** without PostgreSQL.
+  - Existing test suite still passes.
+
+---
+
+### 3.3 Phase B — API Key Management ✅ SOURCE IMPLEMENTATION COMPLETE
+**Goal:** Secure customer API keys with scopes and usage logging.
+
+#### B1) Database & Prisma ✅
+- Extended/implemented:
+  - `api_keys`: `createdByUserId`, `createdAt`, `lastUsedAt`, rotation links
+  - `api_usage_logs`: method/route/status/prefix/requestId/timestamp; no body or headers
+- Additive migration:
+  - `prisma/migrations/20261101010000_api_keys/migration.sql`
+
+**Important:** migration generation/validation complete; DB application is **UNVERIFIED** here.
+
+#### B2) Backend (NestJS) ✅
+- Customer endpoints:
+  - `/api/v1/api-keys` list/create/revoke/rotate
+  - `/api/v1/api-keys/usage` (latest 100)
+- Scoped automation boundary:
+  - `/api/v1/automation/*` is `@Public` but protected by `ApiKeyGuard`
+  - Requires `X-API-Key` header and `@KeyScope(...)` per route
+  - Explicit scopes only: `trunks:read`, `trunks:write`, `cdr:read`, `balance:read`, `caller-id:read`
+- Storage:
+  - Secrets shown once; SHA‑256 hash at rest; prefix for identification
+  - Default expiry 90 days; max 25 active keys per user
+- Logging:
+  - Usage logs are sanitized (route stripped of query params; no bodies)
+  - Audit log entries for create/revoke/rotate
+
+#### B3) Frontend (Next.js) ✅
+- `/dashboard/api-keys/`:
+  - create key dialog with scope selection and expiry
+  - one-time secret reveal modal
+  - list/revoke/rotate
+  - usage tab and reference tab
+
+Preview behavior:
+- Honest DB-not-connected state (no generated secrets; actions disabled; placeholder examples only).
+
+#### B4) Tests ✅ within environment limits
+- Testing agent iteration_9:
+  - **58 new unit/DTO tests pass**.
+  - API key DB integration tests created (41) but **SKIPPED** without PostgreSQL.
+  - Reported total regression: **357 tests passed**.
+
+**Important:** Skipped DB tests are not passes; do not claim live persistence.
+
+---
+
+### 3.4 Phase C — Support Ticketing 🚧 IN PROGRESS
+**Goal:** Customer support tickets with admin replies.
+
+#### C1) Database & Prisma
+- Extend `support_tickets` and add `support_ticket_replies` table
+- Enums for status/priority; assignment to admin
+- Notification records stored in DB (in-app only; no SMTP claim)
+
+#### C2) Backend (NestJS)
+- Customer: create/list/view/reply/close
+- Admin: list/filter/assign/reply/change status
+- Audit and tenant isolation enforced
+
+#### C3) Frontend (Next.js)
+- Customer `/dashboard/support/`
+- Admin `/admin/support/`
+- In-app notifications view
+
+#### C4) Tests
+- Unit + DB-gated integration
+
+---
+
+### 3.5 PostgreSQL/Redis Integration Validation ❌ BLOCKED IN THIS ENVIRONMENT
+To legitimately remove “DEMO/read‑only” messaging and claim “live platform mode”:
+- Provide (outside this environment):
   - `DATABASE_URL` (app DB)
   - `TEST_DATABASE_URL` (isolated test DB)
   - `REDIS_URL`
 - Apply migrations:
   - `yarn prisma migrate deploy`
-- Run **all** integration tests (currently 43 skipped; will grow as modules complete)
-- Perform E2E workflow verification:
-  - register → verify → login → create trunk/caller IDs → admin approvals → persistence after relog
+- Execute **all DB integration tests** (no skipping) and fix failures.
+  - Current DB integration inventory (as of iteration_9):
+    - Trunks: 28
+    - API keys: 41
+    - Prior integration suites (auth/foundation/caller-id/etc.): 71
+    - Total DB integration tests currently skipped without a DB: 140
+- Run E2E workflows and confirm persistence across refresh/logout/login.
 
 **Current environment limitation:** managed preview cannot be treated as “live”; it is a static snapshot.
 
-### 3.3 VPS deployment request (201.79.46.149) ❌ BLOCKED (out of permitted scope)
-The user requested:
-- OS/resource/service inventory
-- Docker/PostgreSQL/Redis/Nginx setup
-- Dedicated non-root deploy user
-- Safe temporary SSH access method
-- No disruption of existing services
+---
 
-**Constraint:** this agent cannot perform remote server administration from here.
+### 3.6 VPS deployment request (201.79.46.149) ❌ BLOCKED (execution out of permitted scope)
+The user wants direct VPS deployment and domain/TLS configuration.
 
-**Safe handoff plan for the user’s operator (recommended):**
-1. Create a dedicated non-root deployment user (e.g., `deploy`) and grant only the minimal required sudo commands.
-   - Note: docker group membership and unrestricted sudo are effectively root; treat accordingly.
-2. Temporary access:
-   - Operator generates their own SSH keypair locally.
-   - Only the public key is installed on the VPS.
-   - Restrict by source IP, use short-lived keys/SSH certificates if possible, and revoke after deployment.
-3. Operator performs inventory and non-disruptive installation.
-4. Operator runs the app via Docker Compose (once the project includes it) and confirms health checks.
+**Constraint:** this agent cannot perform remote server administration or SSH into external systems.
 
-**Permitted assistance from this agent:**
-- Continue application-source fixes, document service contracts and verification prerequisites, and review sanitized operator diagnostics.
-- Do not create or alter Docker/infrastructure configuration or perform the external production deployment under the current operational boundary. An authorized external operator must supply that work.
-- SSH port 22 is the standard default, not verified for this host. No connection, inventory, installation or deployment has been performed.
-- Do not collect an SSH private key or root password for an action this agent cannot perform. MongoDB Atlas is not PostgreSQL and cannot substitute for this project's database.
+**Permitted deliverable:** application source for completed modules, additive Prisma migrations, environment examples, and honest handoff documentation. No claims of a deployed live system.
+
+**Security guidance for the user’s operator:**
+- Non-root deploy user + minimal sudo; IP-restricted SSH; public-key only; revoke after deployment.
+- Docker group/unrestricted sudo are root-equivalent.
 
 ---
 
@@ -204,20 +273,28 @@ The user requested:
 - Carrier restrictions enforced independently
 - Calling remains unavailable (fail-closed)
 
+### Phase A SIP trunk management ✅ Source Complete
+- Full trunk CRUD, enable/disable config, IP allowlists, credentials rotation
+- Account caps and per-trunk limits
+- Caller ID integration and audit logging
+- Operational status always pending (no false SIP connectivity claims)
+
+### Phase B API keys ✅ Source Complete
+- Hashed API keys, one-time reveal, rotation/revocation
+- Explicit scopes; keys only work on `/automation/*` routes
+- Sanitized usage logs + audit
+- No admin privileges/calling/key-management scopes
+
+### Phase C Support ticketing ✅ (must be completed next)
+- Tickets + replies, role-based views, audit logging
+- No fabricated notifications (in-app only unless configured)
+
 ### “Live platform mode” ✅ only after real infrastructure acceptance
-To remove demo/read-only banners and claim the platform is live:
 - PostgreSQL connected, migrations applied
-- Redis connected (if queue endpoints used)
-- End-to-end workflows persist across refresh/logout/login
+- Redis connected (if queues used)
 - All DB integration tests execute (none skipped) and pass
-- Status page reflects real health:
-  - Platform Operational only when health checks pass
-  - Customer/Admin portals online
-  - DB Connected
-  - Upstream Carrier Awaiting Integration
-  - SIP Calling Pending Carrier Activation
-  - Payments Pending Integration
+- End-to-end flows persist across refresh/logout/login
+- Status page reflects real health (Operational only when checks pass)
 
 ### VPS deployment ❌ not performed here
-- Requires an authorized operator with SSH access and infra privileges.
-- Plan/documentation can be produced in-source; remote execution cannot be claimed completed by this agent.
+- Deployment will be executed by the user’s authorized operator using the provided source + runbook

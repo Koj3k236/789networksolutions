@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "organizations" ADD COLUMN     "sipConcurrentLimit" INTEGER NOT NULL DEFAULT 20,
+ADD COLUMN     "sipCpsLimit" INTEGER NOT NULL DEFAULT 2;
+
+-- AlterTable
+ALTER TABLE "sip_trunks" ADD COLUMN     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "deletedAt" TIMESTAMPTZ(3),
+ADD COLUMN     "description" TEXT NOT NULL DEFAULT '',
+ADD COLUMN     "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "version" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "sip_credentials" ADD COLUMN     "algorithm" TEXT NOT NULL DEFAULT 'SHA-256',
+ADD COLUMN     "realm" TEXT NOT NULL DEFAULT 'sip.example.com';
+

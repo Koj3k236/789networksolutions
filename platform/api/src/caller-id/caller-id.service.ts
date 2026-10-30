@@ -47,6 +47,14 @@ export class CallerIdService {
     ];
     return {external,assigned,inventory};
   }
+  async assertSelectable(tx: Prisma.TransactionClient, org: Organization, number: string): Promise<string> {
+    const normalized=this.normalize(number);
+    const {inventory}=await this.identities(tx,org.id);
+    const decision=evaluateCallerIdPolicy({settings:org,identity:inventory.find(n=>n.number===normalized),perCall:false,accountEligible:!['SUSPENDED','REJECTED'].includes(org.status)});
+    if(!decision.customerPermissionAllowed)throw new ForbiddenException({message:'Caller ID is not authorized for this customer.',reasons:decision.reasons});
+    return normalized;
+  }
+
   async workspace(orgId: string, actor: Principal) {
     this.access(orgId,actor);
     const org = await this.db.organization.findUnique({where:{id:orgId},include:{callerIdPermissionsUpdatedBy:{select:{id:true,fullName:true}}}});
@@ -54,7 +62,7 @@ export class CallerIdService {
     const [identityData, requests, trunks, audit] = await Promise.all([
       this.identities(this.db,orgId),
       this.db.callerIdPermissionRequest.findMany({where:{organizationId:orgId},orderBy:{createdAt:'desc'},take:100,include:{requestedBy:{select:{fullName:true}},reviewedBy:{select:{fullName:true}}}}),
-      this.db.sipTrunk.findMany({where:{organizationId:orgId},select:{id:true,name:true,defaultCallerId:true}}),
+      this.db.sipTrunk.findMany({where:{organizationId:orgId,deletedAt:null},select:{id:true,name:true,defaultCallerId:true}}),
       this.db.auditLog.findMany({where:{organizationId:orgId,action:{startsWith:'CALLER_ID_'}},orderBy:{createdAt:'desc'},take:100}),
     ]);
     const actorIds = [...new Set(audit.map(a=>a.actorId).filter((id): id is string=>!!id))];
@@ -161,12 +169,12 @@ export class CallerIdService {
     const allowed=inventory.filter(identity=>evaluateCallerIdPolicy({settings:org,identity,perCall:false,accountEligible:!['SUSPENDED','REJECTED'].includes(org.status)}).customerPermissionAllowed).map(n=>n.number);
     const where={organizationId:org.id,defaultCallerId:{not:null,...(allowed.length?{notIn:allowed}:{})}};
     const invalid=await tx.sipTrunk.findMany({where,select:{id:true,defaultCallerId:true}});
-    await tx.sipTrunk.updateMany({where,data:{defaultCallerId:null}});
+    await tx.sipTrunk.updateMany({where,data:{defaultCallerId:null,version:{increment:1}}});
     for(const trunk of invalid) await this.audit(tx,org.id,actor,'CALLER_ID_TRUNK_DEFAULT_CLEARED',trunk.id,{before:trunk.defaultCallerId,after:null,reason:'Customer policy or number authorization no longer permits this identity.'},ip);
   }
   async setDefault(actor: Principal, trunkId: string, number: string|null, ip?: string) {
     return this.locked(actor.organizationId,async(tx,org)=>{
-      const trunk=await tx.sipTrunk.findFirst({where:{id:trunkId,organizationId:org.id}});
+      const trunk=await tx.sipTrunk.findFirst({where:{id:trunkId,organizationId:org.id,deletedAt:null}});
       if(!trunk) throw new NotFoundException('SIP trunk not found.');
       const normalized=number===null?null:this.normalize(number);
       if(normalized){
@@ -174,7 +182,7 @@ export class CallerIdService {
         const decision=evaluateCallerIdPolicy({settings:org,identity:inventory.find(n=>n.number===normalized),perCall:false,accountEligible:!['SUSPENDED','REJECTED'].includes(org.status)});
         if(!decision.customerPermissionAllowed) throw new ForbiddenException({message:'Caller ID is not authorized for this customer.',reasons:decision.reasons});
       }
-      await tx.sipTrunk.update({where:{id:trunk.id},data:{defaultCallerId:normalized}});
+      await tx.sipTrunk.update({where:{id:trunk.id},data:{defaultCallerId:normalized,version:{increment:1}}});
       await this.audit(tx,org.id,actor,'CALLER_ID_TRUNK_DEFAULT_UPDATED',trunk.id,{before:trunk.defaultCallerId,after:normalized,serviceStatus:'Pending Upstream Activation'},ip);
       return {defaultCallerId:normalized,serviceStatus:'Pending Upstream Activation'};
     });
@@ -182,7 +190,7 @@ export class CallerIdService {
   async validate(actor: Principal, body: ValidateCallerIdDto, ip?: string) {
     const number=this.normalize(body.callerId);
     return this.locked(actor.organizationId,async(tx,org)=>{
-      const trunk=await tx.sipTrunk.findFirst({where:{id:body.trunkId,organizationId:org.id}});
+      const trunk=await tx.sipTrunk.findFirst({where:{id:body.trunkId,organizationId:org.id,deletedAt:null}});
       if(!trunk) throw new NotFoundException('SIP trunk not found.');
       const {inventory}=await this.identities(tx,org.id);
       // Carrier flags are loaded server-side. The customer cannot assert compatibility.

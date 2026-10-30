@@ -14,7 +14,7 @@ export class PortalService {
       this.db.organization.findUniqueOrThrow({where:{id:orgId},select:{id:true,businessName:true,status:true,mode:true,productionEnabled:true,createdAt:true}}),
       this.db.wallet.findUnique({where:{organizationId_mode_currency:{organizationId:orgId,mode:'DEMO',currency:'USD'}},include:{entries:{orderBy:{createdAt:'desc'}}}}),
       this.db.callDetailRecord.findMany({where:{organizationId:orgId,mode:'DEMO',startTime:{gte:since}},orderBy:{startTime:'desc'},include:{trunk:{select:{name:true}}}}),
-      this.db.sipTrunk.findMany({where:{organizationId:orgId,mode:'DEMO'},select:{id:true,name:true,enabled:true,authType:true,maxConcurrent:true,mode:true}}),
+      this.db.sipTrunk.findMany({where:{organizationId:orgId,mode:'DEMO',deletedAt:null},select:{id:true,name:true,enabled:true,authType:true,maxConcurrent:true,mode:true}}),
       this.db.phoneNumber.findMany({where:{organizationId:orgId,mode:'DEMO'}})
     ]);
     const bucketMs=days===1?3600000:86400000;

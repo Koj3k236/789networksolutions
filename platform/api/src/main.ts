@@ -22,7 +22,7 @@ export async function createApplication() {
     res.setHeader('Cache-Control','no-store');next();
   });
   app.useGlobalPipes(new ValidationPipe({whitelist:true,forbidNonWhitelisted:true,transform:true}));
-  const document=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('789 NETWORK SOLUTIONS API').setDescription('Phase 1 foundation. DEMO ONLY. Real calling, provisioning, payments and email delivery are unavailable.').setVersion('1.0.0').addBearerAuth().build());
+  const document=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('789 NETWORK SOLUTIONS API').setDescription('Phase 1 foundation. DEMO ONLY. Real calling, provisioning, payments and email delivery are unavailable.').setVersion('1.0.0').addBearerAuth().addApiKey({type:'apiKey',in:'header',name:'X-API-Key'},'ApiKey').build());
   SwaggerModule.setup('api/docs',app,document,{jsonDocumentUrl:'api/openapi.json'});
   app.enableShutdownHooks();return app;
 }

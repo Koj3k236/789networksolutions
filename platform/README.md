@@ -1,5 +1,9 @@
 # 789 NETWORK SOLUTIONS
 
+## Latest additions — A / B / C
+
+SIP trunk management, scoped API keys, and support ticketing with in-app notifications are implemented in source. See [ABC-HANDOFF.md](docs/ABC-HANDOFF.md) for module behavior, API routes, migrations, environment examples and the external administrator handoff. These additions do not activate live SIP or establish production readiness. Database acceptance remains unverified.
+
 ## Latest addition — Caller ID permissions
 
 See [Caller ID module documentation](docs/CALLER-ID.md) for the additive migration, customer/admin workflows, authorization policy, API endpoints, and test limitations. External passthrough defaults OFF. Carrier compatibility is enforced separately and outbound calling remains unavailable. The new Caller ID pages show a connection-required state, not fabricated sample records, when no PostgreSQL-backed session is available. Existing unrelated modules were preserved.
@@ -33,9 +37,9 @@ The main application is **Next.js + TypeScript** and **NestJS + TypeScript**, us
 ### Not included / not validated
 - No Dockerfile, Compose configuration, ingress, CI/CD, backup jobs, or real deployment was created. Infrastructure configuration is outside this execution environment's allowed scope. A service contract is documented; this remains an outstanding requested deliverable.
 - PostgreSQL/Redis/Docker are not available in the managed environment. Database migration execution, complete local account flows, and worker execution require validation on a compatible machine. Never interpret mocked Prisma unit tests as PostgreSQL integration tests.
-- Only Phase 1 application source is implemented. Trunk CRUD/SIP/media, real carrier adapters, number provisioning/porting, full production billing, Voice API keys/webhooks, IVR/AMD, reseller workflows, and advanced fraud are later phases.
+- Foundation, Caller ID permissions, SIP trunk configuration CRUD, scoped API key management, support conversations and in-app notifications are implemented in source. Real SIP/media, carrier adapters, number provisioning/porting, production billing, signed webhooks, IVR/AMD, reseller workflows and advanced fraud remain later work. Real PostgreSQL acceptance has not been completed.
 
 ### Managed preview versus connected application
-`NEXT_PUBLIC_PREVIEW=true` compiles a **read-only sample workspace** with fictional records and disabled mutations. This is only the managed visual preview. `NEXT_PUBLIC_PREVIEW=false` (the local default) requires the real NestJS API: it never silently falls back to sample records if an API fails. No preview data is written to a real tenant.
+`NEXT_PUBLIC_PREVIEW=true` compiles a read-only managed preview. The older dashboard contains explicitly fictional records; the newer Caller ID, trunk, API key and support modules instead show connection-required/empty states without fabricated records. `NEXT_PUBLIC_PREVIEW=false` (the local default) requires the real NestJS API: it never silently falls back to sample records if an API fails. No preview data is written to a real tenant.
 
 The source archive intentionally excludes dependencies, build output, environment files, and credentials. Install from `yarn.lock` and configure your own local services.

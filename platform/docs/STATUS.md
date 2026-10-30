@@ -9,7 +9,7 @@ Next.js customer/admin/public interfaces; NestJS APIs; PostgreSQL Prisma schema/
 - Prisma schema validation and client generation.
 - SQL baseline generation (not database application).
 - NestJS TypeScript compilation.
-- Next.js TypeScript compilation and 42-page static build.
+- Next.js TypeScript compilation and the current static build including A/B/C management routes.
 - Unit-level crypto, access guard, auth token behavior, adapter boundaries, and billing calculations. Supplemental source checks are not end-to-end security proof.
 - Browser preview validation reported separately in test reports.
 
@@ -26,7 +26,7 @@ Dockerfile/Compose configuration, reverse-proxy configuration, production deploy
 
 ## Phase 2 — planned, not implemented
 
-SIP trunk create/edit/delete, IP and credential authentication at SIP edge, live routing/SIP signaling, codec negotiation, OPTIONS diagnostics, CDR ingestion, WebSocket monitoring and simulated/real active call controls remain planned. The separate Caller ID permission/authorization management slice is now implemented in source; see CALLER-ID.md. Its real-database acceptance is still unverified, and it does not implement a SIP edge.
+IP and credential authentication at an actual SIP edge, live routing/signaling, codec negotiation, OPTIONS diagnostics, CDR ingestion, WebSocket monitoring and active call controls remain planned. SIP trunk configuration CRUD, credential generation, authorized-IP management, limits, and Caller ID permissions are now implemented in source; see ABC-HANDOFF.md and CALLER-ID.md. Their real-database acceptance remains unverified.
 
 ## Phase 3 — planned, not implemented
 
@@ -38,7 +38,7 @@ Provider-specific SIP/REST adapter integrations, credential configuration, verif
 
 ## Phase 5 — planned, not implemented
 
-Voice API key permissions, API usage logs, signed webhooks/retries, IVR/TTS, DTMF, conditional AMD, reseller subaccounts/authorization, advanced fraud/quality analytics, full ticketing and attachments.
+Scoped customer API keys, API usage logs, support threads and in-app notifications are implemented in source. Signed webhooks/retries, IVR/TTS, DTMF, AMD, reseller subaccounts, advanced fraud/quality analytics, outbound support notifications and attachments remain planned.
 
 ## Explicit non-claims
 
